@@ -2,9 +2,14 @@
   "CORSRules": [
     {
       "AllowedHeaders": ["*"],
-      "AllowedMethods": ["PUT", "GET", "HEAD"],
-      "AllowedOrigins": ["http://localhost:3000"],
-      "ExposeHeaders": ["ETag"]
+      "AllowedMethods": ["PUT", "GET", "HEAD", "POST", "DELETE"],
+      "AllowedOrigins": [
+        "http://localhost:3000",
+        "https://recipe-storage-5mwwwb0y6-kentofurushos-projects.vercel.app",
+        "https://*.vercel.app"
+      ],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 300
     }
   ]
 }
