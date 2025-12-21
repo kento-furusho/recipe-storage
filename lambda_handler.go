@@ -26,7 +26,21 @@ func initLambda() {
 	}
 
 	ctx := context.Background()
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	
+	// Lambda関数ではAWS_REGIONが自動的に設定されるが、明示的に指定する
+	// Lambda関数の実行環境からリージョンを取得、またはデフォルトを使用
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		// Lambda関数の実行環境変数から取得を試みる
+		// それでも取得できない場合はデフォルトリージョンを使用
+		region = "ap-northeast-1"
+	}
+	
+	log.Printf("Initializing AWS clients with region: %s", region)
+	
+	awsCfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(region),
+	)
 	if err != nil {
 		log.Fatalf("LoadDefaultConfig: %v", err)
 	}

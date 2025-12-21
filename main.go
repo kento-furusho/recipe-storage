@@ -317,12 +317,14 @@ func callBedrockAPI(ctx context.Context, prompt string, imageDataList []*ImageDa
 	}
 
 	// Bedrock APIを呼び出し
+	log.Printf("Invoking Bedrock model: %s, region: %s", modelID, bedrockClient.Options().Region)
 	result, err := bedrockClient.InvokeModel(ctx, &bedrockruntime.InvokeModelInput{
 		ModelId:     aws.String(modelID),
 		ContentType: aws.String("application/json"),
 		Body:        jsonBody,
 	})
 	if err != nil {
+		log.Printf("Bedrock API error details: %+v", err)
 		return "", fmt.Errorf("failed to invoke model: %w", err)
 	}
 
@@ -512,7 +514,7 @@ func generateRecipeWithLLM(ctx context.Context, job *Job) (*Recipe, error) {
 	prompt := buildPrompt(len(imageDataList), job.SourceURL)
 
 	// Bedrock APIを呼び出し（リトライ付き）
-	log.Printf("Calling Bedrock API for job %s", job.JobID)
+	log.Printf("Calling Bedrock API for job %s with %d images", job.JobID, len(imageDataList))
 	var responseText string
 	var err error
 	maxRetries := 3
@@ -522,6 +524,7 @@ func generateRecipeWithLLM(ctx context.Context, job *Job) (*Recipe, error) {
 			log.Printf("Bedrock API call succeeded for job %s", job.JobID)
 			break
 		}
+		log.Printf("Bedrock API call failed (attempt %d/%d) for job %s: %v", i+1, maxRetries, job.JobID, err)
 		if i < maxRetries-1 {
 			backoff := time.Duration(1<<uint(i)) * time.Second // 指数バックオフ: 1秒、2秒、4秒
 			log.Printf("Retrying Bedrock API call (attempt %d/%d) after %v", i+1, maxRetries, backoff)
@@ -529,6 +532,7 @@ func generateRecipeWithLLM(ctx context.Context, job *Job) (*Recipe, error) {
 		}
 	}
 	if err != nil {
+		log.Printf("Failed to call Bedrock API after %d retries for job %s: %v", maxRetries, job.JobID, err)
 		return nil, fmt.Errorf("failed to call Bedrock API after %d retries: %w", maxRetries, err)
 	}
 
