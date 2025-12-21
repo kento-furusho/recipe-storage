@@ -1,18 +1,20 @@
 "use client";
 
-import { getImageUrl, getRecipe, Recipe } from "@/lib/api";
+import { deleteRecipe, getImageUrl, getRecipe, Recipe } from "@/lib/api";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function RecipeDetailPage() {
   const params = useParams();
   const recipeId = params.recipeId as string;
+  const router = useRouter();
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (recipeId) {
@@ -50,6 +52,29 @@ export default function RecipeDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!recipeId || deleting) {
+      return;
+    }
+    if (!window.confirm("このレシピを削除しますか？")) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      setError(null);
+      await deleteRecipe(recipeId);
+      router.push("/recipes");
+    } catch (err) {
+      console.error("Failed to delete recipe:", err);
+      setError(
+        err instanceof Error ? err.message : "レシピの削除に失敗しました"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
@@ -81,13 +106,21 @@ export default function RecipeDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 max-w-4xl">
-        <div className="mb-6">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <Link
             href="/recipes"
             className="text-blue-600 hover:text-blue-800 underline"
           >
             ← レシピ一覧に戻る
           </Link>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? "削除中..." : "削除"}
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">

@@ -134,6 +134,48 @@ func handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(recipe)
 }
 
+// handleDeleteRecipe はレシピを削除する
+func handleDeleteRecipe(w http.ResponseWriter, r *http.Request) {
+	recipeID := chi.URLParam(r, "recipeId")
+	if recipeID == "" {
+		http.Error(w, "recipeId required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	recipe, err := dbStore.GetRecipe(ctx, recipeID)
+	if err != nil {
+		log.Printf("Failed to get recipe from DynamoDB: %v", err)
+		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
+		return
+	}
+	if recipe == nil {
+		http.Error(w, "recipe not found", http.StatusNotFound)
+		return
+	}
+
+	if err := dbStore.DeleteRecipe(ctx, recipeID); err != nil {
+		log.Printf("Failed to delete recipe from DynamoDB: %v", err)
+		http.Error(w, "failed to delete recipe", http.StatusInternalServerError)
+		return
+	}
+
+	// Image deletion is best-effort; the recipe should be removed regardless.
+	for _, key := range recipe.ImageKeys {
+		if key == "" {
+			continue
+		}
+		if _, err := s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+			Bucket: &bucketName,
+			Key:    &key,
+		}); err != nil {
+			log.Printf("Failed to delete image from S3 (key=%s): %v", key, err)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleGetImageURL は画像のpresigned URL取得ハンドラー
 func handleGetImageURL(w http.ResponseWriter, r *http.Request) {
 	s3Key := r.URL.Query().Get("key")

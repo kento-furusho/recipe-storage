@@ -102,6 +102,20 @@ func (s *DynamoDBStore) GetRecipe(ctx context.Context, recipeID string) (*Recipe
 	return &recipe, nil
 }
 
+// DeleteRecipe はレシピをDynamoDBから削除する
+func (s *DynamoDBStore) DeleteRecipe(ctx context.Context, recipeID string) error {
+	_, err := dynamoClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(recipesTableName),
+		Key: map[string]types.AttributeValue{
+			"recipeId": &types.AttributeValueMemberS{Value: recipeID},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete recipe: %w", err)
+	}
+	return nil
+}
+
 // ListRecipes はレシピ一覧をDynamoDBから取得する
 func (s *DynamoDBStore) ListRecipes(ctx context.Context, userID string) ([]*Recipe, error) {
 	result, err := dynamoClient.Scan(ctx, &dynamodb.ScanInput{
@@ -128,4 +142,3 @@ func (s *DynamoDBStore) ListRecipes(ctx context.Context, userID string) ([]*Reci
 }
 
 var dbStore = &DynamoDBStore{}
-

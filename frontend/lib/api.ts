@@ -229,6 +229,20 @@ export async function getRecipe(recipeId: string): Promise<Recipe> {
 }
 
 /**
+ * レシピを削除する
+ */
+export async function deleteRecipe(recipeId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/recipes/${recipeId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to delete recipe: ${errorText}`);
+  }
+}
+
+/**
  * S3画像のpresigned URLを取得する
  */
 export async function getImageUrl(s3Key: string): Promise<string> {
