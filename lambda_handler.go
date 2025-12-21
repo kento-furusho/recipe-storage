@@ -1,3 +1,4 @@
+//go:build lambda
 // +build lambda
 
 package main
@@ -9,10 +10,10 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 )
 
 var chiLambda *chiadapter.ChiLambda
