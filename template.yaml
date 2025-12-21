@@ -12,6 +12,30 @@ Globals:
         S3_BUCKET: !Ref S3BucketName
 
 Resources:
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+
+  RecipesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-recipes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: recipeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: recipeId
+          KeyType: HASH
+
   RecipeAPIFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -58,6 +82,17 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: "*"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !GetAtt JobsTable.Arn
+                - !GetAtt RecipesTable.Arn
 
   RecipeAPI:
     Type: AWS::Serverless::Api

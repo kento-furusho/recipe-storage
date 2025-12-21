@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 )
@@ -49,6 +50,7 @@ func initLambda() {
 	s3Client = s3.NewFromConfig(awsCfg)
 	s3Presigner = s3.NewPresignClient(s3Client)
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
+	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 	bucketName = bucket
 
 	// ルーターをセットアップ

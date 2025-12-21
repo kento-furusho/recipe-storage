@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -89,6 +90,7 @@ var (
 	s3Client      *s3.Client
 	s3Presigner   *s3.PresignClient
 	bedrockClient *bedrockruntime.Client
+	dynamoClient  *dynamodb.Client
 	bucketName    string
 )
 
@@ -110,6 +112,7 @@ func main() {
 	s3Client = s3.NewFromConfig(awsCfg)
 	s3Presigner = s3.NewPresignClient(s3Client)
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
+	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 	bucketName = bucket
 
 	// ルーターをセットアップ
@@ -459,24 +462,33 @@ func processJob(jobID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 280*time.Second)
 	defer cancel()
 
-	jobStore.mu.Lock()
-	job, exists := jobStore.jobs[jobID]
-	if !exists {
-		jobStore.mu.Unlock()
+	// DynamoDBからジョブを取得
+	job, err := dbStore.GetJob(ctx, jobID)
+	if err != nil {
+		log.Printf("Failed to get job from DynamoDB: %v", err)
 		return
 	}
+	if job == nil {
+		log.Printf("Job not found: %s", jobID)
+		return
+	}
+
+	// ステータスを更新
 	job.Status = JobStatusProcessing
 	job.UpdatedAt = time.Now()
-	jobStore.mu.Unlock()
+	if err := dbStore.SaveJob(ctx, job); err != nil {
+		log.Printf("Failed to update job status: %v", err)
+		return
+	}
 
 	var recipe *Recipe
-	var err error
+	var recipeErr error
 
 	// 画像がある場合はLLMを使用、ない場合はダミー実装
 	if len(job.ImageKeys) > 0 {
-		recipe, err = generateRecipeWithLLM(ctx, job)
-		if err != nil {
-			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, err)
+		recipe, recipeErr = generateRecipeWithLLM(ctx, job)
+		if recipeErr != nil {
+			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, recipeErr)
 			// LLM失敗時はダミー実装にフォールバック
 			recipe = generateDummyRecipe(job)
 		}
@@ -485,17 +497,24 @@ func processJob(jobID string) {
 		recipe = generateDummyRecipe(job)
 	}
 
-	jobStore.mu.Lock()
-	if err == nil {
+	// ジョブとレシピをDynamoDBに保存
+	if recipeErr == nil {
 		job.Status = JobStatusSucceeded
 	} else {
 		job.Status = JobStatusFailed
 	}
 	job.RecipeID = &recipe.RecipeID
 	job.UpdatedAt = time.Now()
-	jobStore.jobs[jobID] = job
-	jobStore.recipes[recipe.RecipeID] = recipe
-	jobStore.mu.Unlock()
+
+	if err := dbStore.SaveJob(ctx, job); err != nil {
+		log.Printf("Failed to save job to DynamoDB: %v", err)
+		return
+	}
+
+	if err := dbStore.SaveRecipe(ctx, recipe); err != nil {
+		log.Printf("Failed to save recipe to DynamoDB: %v", err)
+		return
+	}
 
 	if len(job.ImageKeys) > 0 {
 		log.Printf("Job %s completed, recipe %s created: %s (LLM generated)", jobID, recipe.RecipeID, recipe.Title)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -39,9 +40,13 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt: now,
 	}
 
-	jobStore.mu.Lock()
-	jobStore.jobs[jobID] = job
-	jobStore.mu.Unlock()
+	// DynamoDBに保存
+	ctx := r.Context()
+	if err := dbStore.SaveJob(ctx, job); err != nil {
+		log.Printf("Failed to save job to DynamoDB: %v", err)
+		http.Error(w, "failed to save job", http.StatusInternalServerError)
+		return
+	}
 
 	// 非同期でレシピ生成を開始
 	go processJob(jobID)
@@ -61,11 +66,14 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobStore.mu.RLock()
-	job, exists := jobStore.jobs[jobID]
-	jobStore.mu.RUnlock()
-
-	if !exists {
+	ctx := r.Context()
+	job, err := dbStore.GetJob(ctx, jobID)
+	if err != nil {
+		log.Printf("Failed to get job from DynamoDB: %v", err)
+		http.Error(w, "failed to get job", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
 	}
@@ -76,12 +84,14 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 
 // handleGetRecipes はレシピ一覧取得ハンドラー
 func handleGetRecipes(w http.ResponseWriter, r *http.Request) {
-	jobStore.mu.RLock()
-	recipes := make([]*Recipe, 0, len(jobStore.recipes))
-	for _, recipe := range jobStore.recipes {
-		recipes = append(recipes, recipe)
+	ctx := r.Context()
+	userID := "local"
+	recipes, err := dbStore.ListRecipes(ctx, userID)
+	if err != nil {
+		log.Printf("Failed to list recipes from DynamoDB: %v", err)
+		http.Error(w, "failed to list recipes", http.StatusInternalServerError)
+		return
 	}
-	jobStore.mu.RUnlock()
 
 	// 作成日時の降順でソート（新しいものから）
 	for i := 0; i < len(recipes)-1; i++ {
@@ -104,11 +114,14 @@ func handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobStore.mu.RLock()
-	recipe, exists := jobStore.recipes[recipeID]
-	jobStore.mu.RUnlock()
-
-	if !exists {
+	ctx := r.Context()
+	recipe, err := dbStore.GetRecipe(ctx, recipeID)
+	if err != nil {
+		log.Printf("Failed to get recipe from DynamoDB: %v", err)
+		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
+		return
+	}
+	if recipe == nil {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
