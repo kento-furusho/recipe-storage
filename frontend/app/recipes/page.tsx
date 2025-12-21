@@ -1,6 +1,6 @@
 "use client";
 
-import { getImageUrl, getRecipes, Recipe } from "@/lib/api";
+import { deleteRecipe, getImageUrl, getRecipes, Recipe } from "@/lib/api";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -9,6 +9,7 @@ export default function RecipesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadRecipes();
@@ -44,6 +45,35 @@ export default function RecipesPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    recipeId: string
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (deletingId) {
+      return;
+    }
+    if (!window.confirm("このレシピを削除しますか？")) {
+      return;
+    }
+
+    try {
+      setDeletingId(recipeId);
+      setError(null);
+      await deleteRecipe(recipeId);
+      setRecipes((prev) => prev.filter((recipe) => recipe.recipeId !== recipeId));
+    } catch (err) {
+      console.error("Failed to delete recipe:", err);
+      setError(
+        err instanceof Error ? err.message : "レシピの削除に失敗しました"
+      );
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -97,35 +127,46 @@ export default function RecipesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recipes.map((recipe) => (
-              <Link
+              <div
                 key={recipe.recipeId}
-                href={`/recipes/${recipe.recipeId}`}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
-                {recipe.imageKeys && recipe.imageKeys.length > 0 && (
-                  <div className="aspect-video bg-gray-200 relative">
-                    {imageUrls[recipe.imageKeys[0]] ? (
-                      <img
-                        src={imageUrls[recipe.imageKeys[0]]}
-                        alt={recipe.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                        読み込み中...
-                      </div>
-                    )}
+                <Link href={`/recipes/${recipe.recipeId}`}>
+                  {recipe.imageKeys && recipe.imageKeys.length > 0 && (
+                    <div className="aspect-video bg-gray-200 relative">
+                      {imageUrls[recipe.imageKeys[0]] ? (
+                        <img
+                          src={imageUrls[recipe.imageKeys[0]]}
+                          alt={recipe.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                          読み込み中...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                      {recipe.title}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {new Date(recipe.createdAt).toLocaleString("ja-JP")}
+                    </p>
                   </div>
-                )}
-                <div className="p-4">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    {recipe.title}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {new Date(recipe.createdAt).toLocaleString("ja-JP")}
-                  </p>
+                </Link>
+                <div className="px-4 pb-4">
+                  <button
+                    type="button"
+                    onClick={(event) => handleDelete(event, recipe.recipeId)}
+                    disabled={deletingId === recipe.recipeId}
+                    className="w-full px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deletingId === recipe.recipeId ? "削除中..." : "削除"}
+                  </button>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
