@@ -3,6 +3,7 @@ module recipe-api
 go 1.25.5
 
 require (
+	github.com/aws/aws-lambda-go v1.51.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.6 // indirect
@@ -23,6 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.5 // indirect
 	github.com/aws/smithy-go v1.24.0 // indirect
+	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-chi/cors v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect

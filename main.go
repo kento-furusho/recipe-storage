@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 
@@ -89,6 +87,7 @@ var jobStore = &JobStore{
 
 var (
 	s3Client      *s3.Client
+	s3Presigner   *s3.PresignClient
 	bedrockClient *bedrockruntime.Client
 	bucketName    string
 )
@@ -109,179 +108,19 @@ func main() {
 	}
 
 	s3Client = s3.NewFromConfig(awsCfg)
-	presigner := s3.NewPresignClient(s3Client)
+	s3Presigner = s3.NewPresignClient(s3Client)
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
 	bucketName = bucket
 
-	r := chi.NewRouter()
+	// ルーターをセットアップ
+	r := setupRouter()
 
-	// CORS設定
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
-
-	r.Post("/jobs", func(w http.ResponseWriter, r *http.Request) {
-		var req CreateJobRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		// 画像またはURLのどちらかが必要
-		if len(req.ImageKeys) == 0 && (req.SourceURL == nil || *req.SourceURL == "") {
-			http.Error(w, "imageKeys or sourceUrl required", http.StatusBadRequest)
-			return
-		}
-
-		jobID := uuid.New().String()
-		userID := "local"
-		now := time.Now()
-
-		job := &Job{
-			JobID:     jobID,
-			UserID:    userID,
-			Status:    JobStatusPending,
-			ImageKeys: req.ImageKeys,
-			SourceURL: req.SourceURL,
-			RecipeID:  nil,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-
-		jobStore.mu.Lock()
-		jobStore.jobs[jobID] = job
-		jobStore.mu.Unlock()
-
-		// 非同期でレシピ生成を開始（ダミー実装）
-		go processJob(jobID)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(CreateJobResponse{
-			JobID: jobID,
-		})
-	})
-
-	r.Get("/jobs/{jobId}", func(w http.ResponseWriter, r *http.Request) {
-		jobID := chi.URLParam(r, "jobId")
-		if jobID == "" {
-			http.Error(w, "jobId required", http.StatusBadRequest)
-			return
-		}
-
-		jobStore.mu.RLock()
-		job, exists := jobStore.jobs[jobID]
-		jobStore.mu.RUnlock()
-
-		if !exists {
-			http.Error(w, "job not found", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(job)
-	})
-
-	r.Get("/recipes", func(w http.ResponseWriter, r *http.Request) {
-		jobStore.mu.RLock()
-		recipes := make([]*Recipe, 0, len(jobStore.recipes))
-		for _, recipe := range jobStore.recipes {
-			recipes = append(recipes, recipe)
-		}
-		jobStore.mu.RUnlock()
-
-		// 作成日時の降順でソート（新しいものから）
-		for i := 0; i < len(recipes)-1; i++ {
-			for j := i + 1; j < len(recipes); j++ {
-				if recipes[i].CreatedAt.Before(recipes[j].CreatedAt) {
-					recipes[i], recipes[j] = recipes[j], recipes[i]
-				}
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(recipes)
-	})
-
-	r.Get("/recipes/{recipeId}", func(w http.ResponseWriter, r *http.Request) {
-		recipeID := chi.URLParam(r, "recipeId")
-		if recipeID == "" {
-			http.Error(w, "recipeId required", http.StatusBadRequest)
-			return
-		}
-
-		jobStore.mu.RLock()
-		recipe, exists := jobStore.recipes[recipeID]
-		jobStore.mu.RUnlock()
-
-		if !exists {
-			http.Error(w, "recipe not found", http.StatusNotFound)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(recipe)
-	})
-
-	r.Get("/image-url", func(w http.ResponseWriter, r *http.Request) {
-		s3Key := r.URL.Query().Get("key")
-		if s3Key == "" {
-			http.Error(w, "key parameter required", http.StatusBadRequest)
-			return
-		}
-
-		getReq, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
-			Bucket: &bucket,
-			Key:    &s3Key,
-		}, s3.WithPresignExpires(1*time.Hour))
-		if err != nil {
-			http.Error(w, "failed to presign", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"url": getReq.URL,
-		})
-	})
-
-	r.Post("/upload-url", func(w http.ResponseWriter, r *http.Request) {
-		var req UploadURLRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		if req.JobID == "" || req.Index < 0 || req.Index > 2 || req.ContentType == "" {
-			http.Error(w, "jobId, index(0..2), contentType required", http.StatusBadRequest)
-			return
-		}
-
-		userID := "local"
-		key := "uploads/" + userID + "/" + req.JobID + "/" + itoa(req.Index) + ".jpg"
-
-		putReq, err := presigner.PresignPutObject(ctx, &s3.PutObjectInput{
-			Bucket:      &bucket,
-			Key:         &key,
-			ContentType: &req.ContentType,
-		}, s3.WithPresignExpires(10*time.Minute))
-		if err != nil {
-			http.Error(w, "failed to presign", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(UploadURLResponse{
-			UploadURL: putReq.URL,
-			S3Key:     key,
-		})
-	})
-
-	log.Println("API listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	// ローカル開発環境でのみHTTPサーバーを起動
+	// Lambda環境ではlambda_handler.goのinitが実行される
+	if os.Getenv("_LAMBDA_TELEMETRY_LOG_FD") == "" {
+		log.Println("API listening on :8080")
+		log.Fatal(http.ListenAndServe(":8080", r))
+	}
 }
 
 func itoa(i int) string {

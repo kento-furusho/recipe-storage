@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Recipe API - Lambda function with API Gateway
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 512
+    Runtime: provided.al2023
+    Environment:
+      Variables:
+        S3_BUCKET:
+          Ref: S3BucketName
+Resources:
+  RecipeAPIFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+      SamResourceId: RecipeAPIFunction
+    Properties:
+      CodeUri: RecipeAPIFunction
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+      - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          S3_BUCKET:
+            Ref: S3BucketName
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId:
+              Ref: RecipeAPI
+        RootEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId:
+              Ref: RecipeAPI
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          - s3:DeleteObject
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}
+      - Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          Resource: '*'
+  RecipeAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
+        AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''*'''
+        MaxAge: '''300'''
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for storing recipe images
+    Default: your-bucket-name
+Outputs:
+  RecipeAPIUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${RecipeAPI}.execute-api.${AWS::Region}.amazonaws.com/prod
+  RecipeAPIFunctionArn:
+    Description: Lambda function ARN
+    Value:
+      Fn::GetAtt:
+      - RecipeAPIFunction
+      - Arn
