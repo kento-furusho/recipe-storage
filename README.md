@@ -67,6 +67,28 @@ npm run dev
 
 フロントエンドは `http://localhost:3000` で起動します。
 
+## AWS設定
+
+**重要**: Bedrock APIを使用するには、AWS認証情報とBedrockアクセス権限の設定が必要です。
+
+詳細な設定手順は [AWS_SETUP.md](AWS_SETUP.md) を参照してください。
+
+### クイックスタート
+
+1. **AWS CLIで認証情報を設定**（推奨）
+   ```bash
+   aws configure
+   ```
+
+2. **Bedrockモデルアクセスを有効化**
+   - AWSコンソール → Amazon Bedrock → モデルアクセス
+   - Claude 3 Haikuを有効化
+
+3. **動作確認**
+   ```bash
+   aws bedrock list-foundation-models --region ap-northeast-1
+   ```
+
 ## 環境変数
 
 ### バックエンド
@@ -74,7 +96,7 @@ npm run dev
 - `S3_BUCKET`: S3バケット名（必須）
 - `AWS_ACCESS_KEY_ID`: AWSアクセスキー（オプション - デフォルトでは `~/.aws/credentials` を使用）
 - `AWS_SECRET_ACCESS_KEY`: AWSシークレットキー（オプション）
-- `AWS_REGION`: AWSリージョン（オプション）
+- `AWS_REGION`: AWSリージョン（オプション、デフォルト: `ap-northeast-1`）
 
 ### フロントエンド
 

@@ -116,7 +116,7 @@ export default function RecipeDetailPage() {
 
             {/* 作成日 */}
             <p className="text-sm text-gray-500 mb-6">
-              作成日: {new Date(recipe.createdAt).toLocaleDateString("ja-JP")}
+              作成日: {new Date(recipe.createdAt).toLocaleString("ja-JP")}
             </p>
 
             {/* 参照元URL */}

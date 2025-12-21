@@ -122,7 +122,7 @@ export default function RecipesPage() {
                     {recipe.title}
                   </h2>
                   <p className="text-sm text-gray-500">
-                    {new Date(recipe.createdAt).toLocaleDateString("ja-JP")}
+                    {new Date(recipe.createdAt).toLocaleString("ja-JP")}
                   </p>
                 </div>
               </Link>
