@@ -149,7 +149,7 @@ export interface Job {
  * レシピ生成ジョブを作成する
  */
 export async function createJob(
-  imageKeys: string[],
+  imageKeys: string[] = [],
   sourceUrl?: string
 ): Promise<CreateJobResponse> {
   const body: CreateJobRequest = {

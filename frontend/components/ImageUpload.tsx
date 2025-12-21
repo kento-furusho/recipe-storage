@@ -10,6 +10,7 @@ interface ImagePreview {
 
 export default function ImageUpload() {
   const [images, setImages] = useState<ImagePreview[]>([]);
+  const [sourceUrl, setSourceUrl] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
@@ -91,8 +92,9 @@ export default function ImageUpload() {
   }, []);
 
   const handleUpload = useCallback(async () => {
-    if (images.length === 0) {
-      setUploadStatus("画像を選択してください");
+    // 画像またはURLのどちらかが必要
+    if (images.length === 0 && !sourceUrl.trim()) {
+      setUploadStatus("画像またはURLを入力してください");
       return;
     }
 
@@ -100,17 +102,27 @@ export default function ImageUpload() {
     setUploadStatus("アップロード中...");
 
     try {
-      const jobId = generateJobId();
-      const files = images.map((img) => img.file);
-      const s3Keys = await uploadImages(files, jobId);
+      let s3Keys: string[] = [];
+
+      // 画像がある場合はアップロード
+      if (images.length > 0) {
+        const jobId = generateJobId();
+        const files = images.map((img) => img.file);
+        s3Keys = await uploadImages(files, jobId);
+      }
 
       // レシピ生成ジョブを作成
-      const { jobId: createdJobId } = await createJob(s3Keys);
+      const urlToSubmit = sourceUrl.trim() || undefined;
+      const { jobId: createdJobId } = await createJob(s3Keys, urlToSubmit);
 
-      setUploadStatus(
-        `アップロード成功！${s3Keys.length}枚の画像をアップロードしました。レシピ生成を開始しました（ジョブID: ${createdJobId}）。`
-      );
+      const successMessage =
+        images.length > 0
+          ? `アップロード成功！${s3Keys.length}枚の画像をアップロードしました。レシピ生成を開始しました（ジョブID: ${createdJobId}）。`
+          : `レシピ生成を開始しました（ジョブID: ${createdJobId}）。`;
+
+      setUploadStatus(successMessage);
       setImages([]);
+      setSourceUrl("");
 
       // プレビューURLをクリーンアップ
       images.forEach((img) => URL.revokeObjectURL(img.preview));
@@ -124,7 +136,7 @@ export default function ImageUpload() {
     } finally {
       setIsUploading(false);
     }
-  }, [images]);
+  }, [images, sourceUrl]);
 
   // クリーンアップ
   const cleanup = useCallback(() => {
@@ -133,9 +145,28 @@ export default function ImageUpload() {
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6 space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">
-        レシピ画像をアップロード
-      </h2>
+      <h2 className="text-2xl font-bold text-gray-900">レシピを登録</h2>
+
+      {/* URL入力フィールド */}
+      <div className="space-y-2">
+        <label
+          htmlFor="sourceUrl"
+          className="block text-sm font-medium text-gray-700"
+        >
+          レシピURL（任意）
+        </label>
+        <input
+          id="sourceUrl"
+          type="url"
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
+          placeholder="https://example.com/recipe または https://youtube.com/watch?v=..."
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p className="text-xs text-gray-500">
+          レシピサイトのURLやYouTube動画URLを入力できます
+        </p>
+      </div>
 
       {/* ドラッグ&ドロップエリア */}
       <div
@@ -232,7 +263,7 @@ export default function ImageUpload() {
       )}
 
       {/* アップロードボタン */}
-      {images.length > 0 && (
+      {(images.length > 0 || sourceUrl.trim()) && (
         <div className="flex justify-center">
           <button
             onClick={handleUpload}
@@ -247,7 +278,7 @@ export default function ImageUpload() {
               text-white
             `}
           >
-            {isUploading ? "アップロード中..." : "アップロード"}
+            {isUploading ? "アップロード中..." : "レシピを登録"}
           </button>
         </div>
       )}

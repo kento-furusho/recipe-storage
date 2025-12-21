@@ -24,7 +24,7 @@ export default function RecipesPage() {
       // 各レシピの最初の画像のpresigned URLを取得
       const urls: Record<string, string> = {};
       for (const recipe of data) {
-        if (recipe.imageKeys.length > 0) {
+        if (recipe.imageKeys && recipe.imageKeys.length > 0) {
           try {
             const url = await getImageUrl(recipe.imageKeys[0]);
             urls[recipe.imageKeys[0]] = url;
@@ -102,7 +102,7 @@ export default function RecipesPage() {
                 href={`/recipes/${recipe.recipeId}`}
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
               >
-                {recipe.imageKeys.length > 0 && (
+                {recipe.imageKeys && recipe.imageKeys.length > 0 && (
                   <div className="aspect-video bg-gray-200 relative">
                     {imageUrls[recipe.imageKeys[0]] ? (
                       <img

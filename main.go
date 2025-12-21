@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,8 +118,9 @@ func main() {
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}
-		if len(req.ImageKeys) == 0 {
-			http.Error(w, "imageKeys required", http.StatusBadRequest)
+		// 画像またはURLのどちらかが必要
+		if len(req.ImageKeys) == 0 && (req.SourceURL == nil || *req.SourceURL == "") {
+			http.Error(w, "imageKeys or sourceUrl required", http.StatusBadRequest)
 			return
 		}
 
@@ -278,6 +281,88 @@ func itoa(i int) string {
 	return "2"
 }
 
+// extractTitleFromURL はURLからタイトルを推測する
+func extractTitleFromURL(sourceURL string) string {
+	if sourceURL == "" {
+		return "レシピ"
+	}
+
+	parsedURL, err := url.Parse(sourceURL)
+	if err != nil {
+		return "レシピ"
+	}
+
+	host := parsedURL.Host
+	path := parsedURL.Path
+
+	// YouTube URLの場合
+	if strings.Contains(host, "youtube.com") || strings.Contains(host, "youtu.be") {
+		return "YouTubeレシピ"
+	}
+
+	// パスからタイトルを推測
+	if path != "" && path != "/" {
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) > 0 {
+			lastPart := parts[len(parts)-1]
+			// URLエンコードされた文字をデコード
+			if decoded, err := url.QueryUnescape(lastPart); err == nil {
+				lastPart = decoded
+			}
+			// ハイフンやアンダースコアをスペースに変換
+			lastPart = strings.ReplaceAll(lastPart, "-", " ")
+			lastPart = strings.ReplaceAll(lastPart, "_", " ")
+			// 最初の文字を大文字に
+			if len(lastPart) > 0 {
+				return strings.ToUpper(string(lastPart[0])) + lastPart[1:]
+			}
+		}
+	}
+
+	// ホスト名から推測
+	if host != "" {
+		parts := strings.Split(host, ".")
+		if len(parts) > 0 {
+			return parts[0] + "のレシピ"
+		}
+	}
+
+	return "レシピ"
+}
+
+// generateDummyRecipe はダミーレシピデータを生成する
+func generateDummyRecipe(job *Job) *Recipe {
+	recipeID := uuid.New().String()
+	now := time.Now()
+
+	// ImageKeysがnilの場合は空配列にする
+	imageKeys := job.ImageKeys
+	if imageKeys == nil {
+		imageKeys = []string{}
+	}
+
+	// URLからタイトルを推測
+	title := "サンプルレシピ"
+	if job.SourceURL != nil && *job.SourceURL != "" {
+		title = extractTitleFromURL(*job.SourceURL)
+	}
+
+	// ダミーの材料と手順（タイトルに応じて変更可能）
+	ingredients := []string{"材料1", "材料2", "材料3"}
+	steps := []string{"手順1: 下準備をする", "手順2: 調理する", "手順3: 仕上げる"}
+
+	return &Recipe{
+		RecipeID:    recipeID,
+		UserID:      job.UserID,
+		Title:       title,
+		Ingredients: ingredients,
+		Steps:       steps,
+		ImageKeys:   imageKeys,
+		SourceURL:   job.SourceURL,
+		CreatedAt:   now,
+	}
+}
+
 // processJob は非同期でレシピ生成を行う（ダミー実装）
 func processJob(jobID string) {
 	jobStore.mu.Lock()
@@ -293,28 +378,15 @@ func processJob(jobID string) {
 	// ダミー処理: 3秒待機してからレシピを生成
 	time.Sleep(3 * time.Second)
 
-	recipeID := uuid.New().String()
-	now := time.Now()
-
-	// ダミーレシピデータ
-	recipe := &Recipe{
-		RecipeID:    recipeID,
-		UserID:      job.UserID,
-		Title:       "サンプルレシピ",
-		Ingredients: []string{"材料1", "材料2", "材料3"},
-		Steps:       []string{"手順1", "手順2", "手順3"},
-		ImageKeys:   job.ImageKeys,
-		SourceURL:   job.SourceURL,
-		CreatedAt:   now,
-	}
+	recipe := generateDummyRecipe(job)
 
 	jobStore.mu.Lock()
 	job.Status = JobStatusSucceeded
-	job.RecipeID = &recipeID
+	job.RecipeID = &recipe.RecipeID
 	job.UpdatedAt = time.Now()
 	jobStore.jobs[jobID] = job
-	jobStore.recipes[recipeID] = recipe
+	jobStore.recipes[recipe.RecipeID] = recipe
 	jobStore.mu.Unlock()
 
-	log.Printf("Job %s completed, recipe %s created", jobID, recipeID)
+	log.Printf("Job %s completed, recipe %s created: %s", jobID, recipe.RecipeID, recipe.Title)
 }

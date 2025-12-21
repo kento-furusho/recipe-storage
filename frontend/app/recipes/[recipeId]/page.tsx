@@ -29,12 +29,14 @@ export default function RecipeDetailPage() {
 
       // 画像のpresigned URLを取得
       const urls: Record<string, string> = {};
-      for (const imageKey of data.imageKeys) {
-        try {
-          const url = await getImageUrl(imageKey);
-          urls[imageKey] = url;
-        } catch (err) {
-          console.error(`Failed to get image URL for ${imageKey}:`, err);
+      if (data.imageKeys && data.imageKeys.length > 0) {
+        for (const imageKey of data.imageKeys) {
+          try {
+            const url = await getImageUrl(imageKey);
+            urls[imageKey] = url;
+          } catch (err) {
+            console.error(`Failed to get image URL for ${imageKey}:`, err);
+          }
         }
       }
       setImageUrls(urls);
@@ -90,7 +92,7 @@ export default function RecipeDetailPage() {
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* 画像 */}
-          {recipe.imageKeys.length > 0 && (
+          {recipe.imageKeys && recipe.imageKeys.length > 0 && (
             <div className="aspect-video bg-gray-200">
               {imageUrls[recipe.imageKeys[0]] ? (
                 <img
@@ -159,7 +161,7 @@ export default function RecipeDetailPage() {
             </div>
 
             {/* 画像一覧 */}
-            {recipe.imageKeys.length > 1 && (
+            {recipe.imageKeys && recipe.imageKeys.length > 1 && (
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-3">
                   画像
