@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 )
 
@@ -27,7 +28,7 @@ func initLambda() {
 	}
 
 	ctx := context.Background()
-	
+
 	// Lambda関数ではAWS_REGIONが自動的に設定されるが、明示的に指定する
 	// Lambda関数の実行環境からリージョンを取得、またはデフォルトを使用
 	region := os.Getenv("AWS_REGION")
@@ -36,9 +37,9 @@ func initLambda() {
 		// それでも取得できない場合はデフォルトリージョンを使用
 		region = "ap-northeast-1"
 	}
-	
+
 	log.Printf("Initializing AWS clients with region: %s", region)
-	
+
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(region),
 	)
@@ -51,7 +52,9 @@ func initLambda() {
 	s3Presigner = s3.NewPresignClient(s3Client)
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
+	sqsClient = sqs.NewFromConfig(awsCfg)
 	bucketName = bucket
+	jobQueueURL = os.Getenv("JOB_QUEUE_URL")
 
 	// ルーターをセットアップ
 	r := setupRouter()
@@ -73,4 +76,3 @@ func init() {
 	initLambda()
 	lambda.Start(Handler)
 }
-

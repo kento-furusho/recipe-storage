@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 type UploadURLRequest struct {
@@ -45,14 +46,14 @@ const (
 )
 
 type Job struct {
-	JobID     string     `json:"jobId"`
-	UserID    string     `json:"userId"`
-	Status    JobStatus  `json:"status"`
-	ImageKeys []string   `json:"imageKeys"`
-	SourceURL *string    `json:"sourceUrl"`
-	RecipeID  *string    `json:"recipeId"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
+	JobID     string    `json:"jobId" dynamodbav:"jobId"`
+	UserID    string    `json:"userId" dynamodbav:"userId"`
+	Status    JobStatus `json:"status" dynamodbav:"status"`
+	ImageKeys []string  `json:"imageKeys" dynamodbav:"imageKeys"`
+	SourceURL *string   `json:"sourceUrl" dynamodbav:"sourceUrl,omitempty"`
+	RecipeID  *string   `json:"recipeId" dynamodbav:"recipeId,omitempty"`
+	CreatedAt time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 type CreateJobRequest struct {
@@ -65,20 +66,20 @@ type CreateJobResponse struct {
 }
 
 type JobStore struct {
-	mu    sync.RWMutex
-	jobs  map[string]*Job
+	mu      sync.RWMutex
+	jobs    map[string]*Job
 	recipes map[string]*Recipe
 }
 
 type Recipe struct {
-	RecipeID    string    `json:"recipeId"`
-	UserID      string    `json:"userId"`
-	Title       string    `json:"title"`
-	Ingredients []string  `json:"ingredients"`
-	Steps       []string  `json:"steps"`
-	ImageKeys   []string  `json:"imageKeys"`
-	SourceURL   *string   `json:"sourceUrl"`
-	CreatedAt   time.Time `json:"createdAt"`
+	RecipeID    string    `json:"recipeId" dynamodbav:"recipeId"`
+	UserID      string    `json:"userId" dynamodbav:"userId"`
+	Title       string    `json:"title" dynamodbav:"title"`
+	Ingredients []string  `json:"ingredients" dynamodbav:"ingredients"`
+	Steps       []string  `json:"steps" dynamodbav:"steps"`
+	ImageKeys   []string  `json:"imageKeys" dynamodbav:"imageKeys"`
+	SourceURL   *string   `json:"sourceUrl" dynamodbav:"sourceUrl,omitempty"`
+	CreatedAt   time.Time `json:"createdAt" dynamodbav:"createdAt"`
 }
 
 var jobStore = &JobStore{
@@ -91,7 +92,9 @@ var (
 	s3Presigner   *s3.PresignClient
 	bedrockClient *bedrockruntime.Client
 	dynamoClient  *dynamodb.Client
+	sqsClient     *sqs.Client
 	bucketName    string
+	jobQueueURL   string
 )
 
 func main() {
@@ -113,7 +116,9 @@ func main() {
 	s3Presigner = s3.NewPresignClient(s3Client)
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
+	sqsClient = sqs.NewFromConfig(awsCfg)
 	bucketName = bucket
+	jobQueueURL = os.Getenv("JOB_QUEUE_URL")
 
 	// ルーターをセットアップ
 	r := setupRouter()
@@ -278,6 +283,8 @@ func buildPrompt(imageCount int, sourceURL *string) string {
 	prompt.WriteString("- 手順は具体的で実行可能な内容にしてください\n")
 	prompt.WriteString("- 不明な点は推測せず、空欄にするか「要確認」と記載してください\n")
 	prompt.WriteString("- 必ず有効なJSON形式で返してください\n")
+	prompt.WriteString("- 返答はJSONのみ。前後の説明文、Markdown、コードブロックは出力しないでください\n")
+	prompt.WriteString("- JSONの先頭は「{」で始め、末尾は「}」で終えてください\n")
 
 	return prompt.String()
 }
@@ -357,16 +364,11 @@ func callBedrockAPI(ctx context.Context, prompt string, imageDataList []*ImageDa
 
 // parseRecipeResponse はLLMのレスポンスをパースしてRecipeオブジェクトを生成する
 func parseRecipeResponse(responseText string, job *Job) (*Recipe, error) {
-	// JSONを抽出（コードブロックやマークダウンを除去）
-	responseText = strings.TrimSpace(responseText)
-	if strings.HasPrefix(responseText, "```json") {
-		responseText = strings.TrimPrefix(responseText, "```json")
-		responseText = strings.TrimSuffix(responseText, "```")
-	} else if strings.HasPrefix(responseText, "```") {
-		responseText = strings.TrimPrefix(responseText, "```")
-		responseText = strings.TrimSuffix(responseText, "```")
+	// JSONを抽出（コードブロックや前後テキストを除去）
+	extracted, err := extractJSON(responseText)
+	if err != nil {
+		return nil, err
 	}
-	responseText = strings.TrimSpace(responseText)
 
 	var llmResponse struct {
 		Title       string   `json:"title"`
@@ -374,7 +376,7 @@ func parseRecipeResponse(responseText string, job *Job) (*Recipe, error) {
 		Steps       []string `json:"steps"`
 	}
 
-	if err := json.Unmarshal([]byte(responseText), &llmResponse); err != nil {
+	if err := json.Unmarshal([]byte(extracted), &llmResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
@@ -421,6 +423,30 @@ func parseRecipeResponse(responseText string, job *Job) (*Recipe, error) {
 	}
 
 	return recipe, nil
+}
+
+func extractJSON(responseText string) (string, error) {
+	responseText = strings.TrimSpace(responseText)
+	if responseText == "" {
+		return "", fmt.Errorf("empty response from model")
+	}
+
+	if strings.HasPrefix(responseText, "```json") {
+		responseText = strings.TrimPrefix(responseText, "```json")
+		responseText = strings.TrimSuffix(responseText, "```")
+	} else if strings.HasPrefix(responseText, "```") {
+		responseText = strings.TrimPrefix(responseText, "```")
+		responseText = strings.TrimSuffix(responseText, "```")
+	}
+	responseText = strings.TrimSpace(responseText)
+
+	start := strings.Index(responseText, "{")
+	end := strings.LastIndex(responseText, "}")
+	if start == -1 || end == -1 || start >= end {
+		return "", fmt.Errorf("failed to locate JSON object in response")
+	}
+
+	return strings.TrimSpace(responseText[start : end+1]), nil
 }
 
 // generateDummyRecipe はダミーレシピデータを生成する

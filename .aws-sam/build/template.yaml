@@ -10,6 +10,8 @@ Globals:
       Variables:
         S3_BUCKET:
           Ref: S3BucketName
+        JOB_QUEUE_URL:
+          Ref: JobQueue
 Resources:
   JobsTable:
     Type: AWS::DynamoDB::Table
@@ -33,6 +35,10 @@ Resources:
       KeySchema:
       - AttributeName: recipeId
         KeyType: HASH
+  JobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
   RecipeAPIFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -100,6 +106,79 @@ Resources:
           - Fn::GetAtt:
             - RecipesTable
             - Arn
+      - Statement:
+        - Effect: Allow
+          Action:
+          - sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - JobQueue
+            - Arn
+  RecipeWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+      SamResourceId: RecipeWorkerFunction
+    Properties:
+      CodeUri: RecipeWorkerFunction
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+      - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Events:
+        JobQueueEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - JobQueue
+              - Arn
+            BatchSize: 1
+      Policies:
+      - Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}
+      - Statement:
+        - Effect: Allow
+          Action:
+          - bedrock:InvokeModel
+          Resource: '*'
+      - Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:Scan
+          - dynamodb:Query
+          Resource:
+          - Fn::GetAtt:
+            - JobsTable
+            - Arn
+          - Fn::GetAtt:
+            - RecipesTable
+            - Arn
+      - Statement:
+        - Effect: Allow
+          Action:
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          - sqs:GetQueueAttributes
+          - sqs:ChangeMessageVisibility
+          Resource:
+            Fn::GetAtt:
+            - JobQueue
+            - Arn
   RecipeAPI:
     Type: AWS::Serverless::Api
     Properties:
@@ -125,3 +204,7 @@ Outputs:
       Fn::GetAtt:
       - RecipeAPIFunction
       - Arn
+  JobQueueUrl:
+    Description: SQS queue URL for job processing
+    Value:
+      Ref: JobQueue

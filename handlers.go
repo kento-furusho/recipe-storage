@@ -48,8 +48,12 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 非同期でレシピ生成を開始
-	go processJob(jobID)
+	// ジョブをキューに投入（ローカルは直接処理）
+	if err := dispatchJob(ctx, jobID); err != nil {
+		log.Printf("Failed to dispatch job: %v", err)
+		http.Error(w, "failed to dispatch job", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -186,4 +190,3 @@ func handleGetUploadURL(w http.ResponseWriter, r *http.Request) {
 		S3Key:     key,
 	})
 }
-
