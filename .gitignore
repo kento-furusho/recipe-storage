@@ -27,3 +27,7 @@ Thumbs.db
 # Test files
 test.jpg
 
+# AWS SAM
+.aws-sam/
+samconfig.toml
+

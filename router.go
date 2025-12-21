@@ -12,12 +12,15 @@ func setupRouter() *chi.Mux {
 	r := chi.NewRouter()
 
 	// CORS設定
-	allowedOrigins := []string{"http://localhost:3000"}
+	allowedOrigins := []string{
+		"http://localhost:3000",
+		"https://recipe-storage-5mwwwb0y6-kentofurushos-projects.vercel.app",
+	}
 	// 環境変数から追加のオリジンを取得（Vercelデプロイ用）
 	if customOrigin := os.Getenv("ALLOWED_ORIGIN"); customOrigin != "" {
 		allowedOrigins = append(allowedOrigins, customOrigin)
 	}
-	// Vercelのドメインを許可（ワイルドカードは使用できないため、環境変数で設定）
+	// Vercelのプレビュー環境用（ワイルドカードは使用できないため、主要なパターンを追加）
 	allowedOrigins = append(allowedOrigins, "https://*.vercel.app")
 
 	r.Use(cors.Handler(cors.Options{

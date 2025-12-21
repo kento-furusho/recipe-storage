@@ -28,6 +28,7 @@ Resources:
         Variables:
           S3_BUCKET:
             Ref: S3BucketName
+          ALLOWED_ORIGIN: https://recipe-storage-5mwwwb0y6-kentofurushos-projects.vercel.app
       Events:
         ApiEvent:
           Type: Api
