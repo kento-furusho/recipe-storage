@@ -200,6 +200,13 @@ export interface Recipe {
   createdAt: string;
 }
 
+export interface UpdateRecipeRequest {
+  title: string;
+  ingredients: string[];
+  steps: string[];
+  sourceUrl?: string;
+}
+
 /**
  * レシピ一覧を取得する
  */
@@ -240,6 +247,29 @@ export async function deleteRecipe(recipeId: string): Promise<void> {
     const errorText = await response.text();
     throw new Error(`Failed to delete recipe: ${errorText}`);
   }
+}
+
+/**
+ * レシピを更新する
+ */
+export async function updateRecipe(
+  recipeId: string,
+  body: UpdateRecipeRequest
+): Promise<Recipe> {
+  const response = await fetch(`${API_BASE_URL}/recipes/${recipeId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update recipe: ${errorText}`);
+  }
+
+  return response.json();
 }
 
 /**

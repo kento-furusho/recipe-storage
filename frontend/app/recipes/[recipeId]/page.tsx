@@ -1,6 +1,12 @@
 "use client";
 
-import { deleteRecipe, getImageUrl, getRecipe, Recipe } from "@/lib/api";
+import {
+  deleteRecipe,
+  getImageUrl,
+  getRecipe,
+  Recipe,
+  updateRecipe,
+} from "@/lib/api";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,6 +21,14 @@ export default function RecipeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    sourceUrl: "",
+    ingredientsText: "",
+    stepsText: "",
+  });
 
   useEffect(() => {
     if (recipeId) {
@@ -28,6 +42,12 @@ export default function RecipeDetailPage() {
       setError(null);
       const data = await getRecipe(recipeId);
       setRecipe(data);
+      setForm({
+        title: data.title,
+        sourceUrl: data.sourceUrl || "",
+        ingredientsText: (data.ingredients || []).join("\n"),
+        stepsText: (data.steps || []).join("\n"),
+      });
 
       // 画像のpresigned URLを取得
       const urls: Record<string, string> = {};
@@ -75,6 +95,53 @@ export default function RecipeDetailPage() {
     }
   };
 
+  const handleSave = async () => {
+    if (!recipeId || saving) {
+      return;
+    }
+    const title = form.title.trim();
+    const ingredients = form.ingredientsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const steps = form.stepsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const sourceUrl = form.sourceUrl.trim();
+
+    if (!title || ingredients.length === 0 || steps.length === 0) {
+      setError("タイトル、材料、手順は必須です");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      const updated = await updateRecipe(recipeId, {
+        title,
+        ingredients,
+        steps,
+        sourceUrl: sourceUrl || undefined,
+      });
+      setRecipe(updated);
+      setForm({
+        title: updated.title,
+        sourceUrl: updated.sourceUrl || "",
+        ingredientsText: (updated.ingredients || []).join("\n"),
+        stepsText: (updated.steps || []).join("\n"),
+      });
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Failed to update recipe:", err);
+      setError(
+        err instanceof Error ? err.message : "レシピの更新に失敗しました"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
@@ -113,14 +180,58 @@ export default function RecipeDetailPage() {
           >
             ← レシピ一覧に戻る
           </Link>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting}
-            className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {deleting ? "削除中..." : "削除"}
-          </button>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!recipe) {
+                      return;
+                    }
+                    setForm({
+                      title: recipe.title,
+                      sourceUrl: recipe.sourceUrl || "",
+                      ingredientsText: (recipe.ingredients || []).join("\n"),
+                      stepsText: (recipe.steps || []).join("\n"),
+                    });
+                    setError(null);
+                    setIsEditing(false);
+                  }}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "保存中..." : "保存"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >
+                  編集
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleting ? "削除中..." : "削除"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -143,9 +254,25 @@ export default function RecipeDetailPage() {
 
           <div className="p-6">
             {/* タイトル */}
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {recipe.title}
-            </h1>
+            {isEditing ? (
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  タイトル
+                </label>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+            ) : (
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">
+                {recipe.title}
+              </h1>
+            )}
 
             {/* 作成日 */}
             <p className="text-sm text-gray-500 mb-6">
@@ -153,7 +280,25 @@ export default function RecipeDetailPage() {
             </p>
 
             {/* 参照元URL */}
-            {recipe.sourceUrl && (
+            {isEditing ? (
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  参照元URL
+                </label>
+                <input
+                  type="url"
+                  value={form.sourceUrl}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      sourceUrl: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+            ) : (
+              recipe.sourceUrl && (
               <div className="mb-6">
                 <h2 className="text-sm font-semibold text-gray-700 mb-2">
                   参照元
@@ -167,30 +312,59 @@ export default function RecipeDetailPage() {
                   {recipe.sourceUrl}
                 </a>
               </div>
+              )
             )}
 
             {/* 材料 */}
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-3">材料</h2>
-              <ul className="list-disc list-inside space-y-1">
-                {recipe.ingredients.map((ingredient, index) => (
-                  <li key={index} className="text-gray-700">
-                    {ingredient}
-                  </li>
-                ))}
-              </ul>
+              {isEditing ? (
+                <textarea
+                  value={form.ingredientsText}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      ingredientsText: event.target.value,
+                    }))
+                  }
+                  rows={6}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              ) : (
+                <ul className="list-disc list-inside space-y-1">
+                  {recipe.ingredients.map((ingredient, index) => (
+                    <li key={index} className="text-gray-700">
+                      {ingredient}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* 手順 */}
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-3">手順</h2>
-              <ol className="list-decimal list-inside space-y-2">
-                {recipe.steps.map((step, index) => (
-                  <li key={index} className="text-gray-700">
-                    {step}
-                  </li>
-                ))}
-              </ol>
+              {isEditing ? (
+                <textarea
+                  value={form.stepsText}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      stepsText: event.target.value,
+                    }))
+                  }
+                  rows={8}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              ) : (
+                <ol className="list-decimal list-inside space-y-2">
+                  {recipe.steps.map((step, index) => (
+                    <li key={index} className="text-gray-700">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
 
             {/* 画像一覧 */}

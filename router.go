@@ -38,6 +38,7 @@ func setupRouter() *chi.Mux {
 	r.Get("/recipes", handleGetRecipes)
 	r.Get("/recipes/{recipeId}", handleGetRecipe)
 	r.Delete("/recipes/{recipeId}", handleDeleteRecipe)
+	r.Put("/recipes/{recipeId}", handleUpdateRecipe)
 	r.Get("/image-url", handleGetImageURL)
 	r.Post("/upload-url", handleGetUploadURL)
 

@@ -12,6 +12,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+type UpdateRecipeRequest struct {
+	Title       string   `json:"title"`
+	Ingredients []string `json:"ingredients"`
+	Steps       []string `json:"steps"`
+	SourceURL   *string  `json:"sourceUrl,omitempty"`
+}
+
 // handleCreateJob はジョブ作成ハンドラー
 func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	var req CreateJobRequest
@@ -174,6 +181,60 @@ func handleDeleteRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleUpdateRecipe はレシピを更新する
+func handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
+	recipeID := chi.URLParam(r, "recipeId")
+	if recipeID == "" {
+		http.Error(w, "recipeId required", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateRecipeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	if req.Title == "" {
+		http.Error(w, "title required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Ingredients) == 0 {
+		http.Error(w, "ingredients required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Steps) == 0 {
+		http.Error(w, "steps required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	recipe, err := dbStore.GetRecipe(ctx, recipeID)
+	if err != nil {
+		log.Printf("Failed to get recipe from DynamoDB: %v", err)
+		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
+		return
+	}
+	if recipe == nil {
+		http.Error(w, "recipe not found", http.StatusNotFound)
+		return
+	}
+
+	recipe.Title = req.Title
+	recipe.Ingredients = req.Ingredients
+	recipe.Steps = req.Steps
+	recipe.SourceURL = req.SourceURL
+
+	if err := dbStore.SaveRecipe(ctx, recipe); err != nil {
+		log.Printf("Failed to save recipe to DynamoDB: %v", err)
+		http.Error(w, "failed to update recipe", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(recipe)
 }
 
 // handleGetImageURL は画像のpresigned URL取得ハンドラー
