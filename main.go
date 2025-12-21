@@ -190,19 +190,24 @@ type ImageData struct {
 
 // downloadImageFromS3 はS3から画像をダウンロードしてbase64エンコードする
 func downloadImageFromS3(ctx context.Context, s3Key string) (*ImageData, error) {
+	log.Printf("Downloading image from S3: %s", s3Key)
 	result, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &bucketName,
 		Key:    &s3Key,
 	})
 	if err != nil {
+		log.Printf("Failed to get object from S3: %s, error: %v", s3Key, err)
 		return nil, fmt.Errorf("failed to get object from S3: %w", err)
 	}
 	defer result.Body.Close()
 
+	log.Printf("Reading image data from S3: %s", s3Key)
 	imageData, err := io.ReadAll(result.Body)
 	if err != nil {
+		log.Printf("Failed to read image data from S3: %s, error: %v", s3Key, err)
 		return nil, fmt.Errorf("failed to read image data: %w", err)
 	}
+	log.Printf("Successfully downloaded image from S3: %s, size: %d bytes", s3Key, len(imageData))
 
 	// メディアタイプを判定（ContentTypeから、またはファイル拡張子から）
 	mediaType := "image/jpeg" // デフォルト
@@ -450,7 +455,8 @@ func generateDummyRecipe(job *Job) *Recipe {
 
 // processJob は非同期でレシピ生成を行う
 func processJob(jobID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	// Lambda関数のタイムアウト（300秒）より短く設定
+	ctx, cancel := context.WithTimeout(context.Background(), 280*time.Second)
 	defer cancel()
 
 	jobStore.mu.Lock()
