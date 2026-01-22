@@ -156,12 +156,18 @@ export default function RecipesPage() {
                     </p>
                   </div>
                 </Link>
-                <div className="px-4 pb-4">
+                <div className="px-4 pb-4 flex gap-2">
+                  <Link
+                    href={`/recipes/${recipe.recipeId}`}
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 text-center transition-colors"
+                  >
+                    編集
+                  </Link>
                   <button
                     type="button"
                     onClick={(event) => handleDelete(event, recipe.recipeId)}
                     disabled={deletingId === recipe.recipeId}
-                    className="w-full px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {deletingId === recipe.recipeId ? "削除中..." : "削除"}
                   </button>
