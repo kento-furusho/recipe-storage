@@ -16,6 +16,20 @@ const (
 	categoriesTableName = "recipe-categories"
 )
 
+// Store はデータストアのインターフェース
+type Store interface {
+	SaveJob(ctx context.Context, job *Job) error
+	GetJob(ctx context.Context, jobID string) (*Job, error)
+	SaveRecipe(ctx context.Context, recipe *Recipe) error
+	GetRecipe(ctx context.Context, recipeID string) (*Recipe, error)
+	DeleteRecipe(ctx context.Context, recipeID string) error
+	ListRecipes(ctx context.Context, userID string) ([]*Recipe, error)
+	SaveCategory(ctx context.Context, category *Category) error
+	GetCategory(ctx context.Context, categoryID string) (*Category, error)
+	DeleteCategory(ctx context.Context, categoryID string) error
+	ListCategories(ctx context.Context, userID string) ([]*Category, error)
+}
+
 // DynamoDBStore はDynamoDBを使用したストレージ実装
 type DynamoDBStore struct{}
 
@@ -219,4 +233,4 @@ func (s *DynamoDBStore) ListCategories(ctx context.Context, userID string) ([]*C
 	return categories, nil
 }
 
-var dbStore = &DynamoDBStore{}
+var dbStore Store = &DynamoDBStore{}
