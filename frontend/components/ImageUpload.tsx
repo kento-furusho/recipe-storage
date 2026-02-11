@@ -98,7 +98,7 @@ export default function ImageUpload() {
     }
 
     setIsUploading(true);
-    setUploadStatus("アップロード中...");
+    setUploadStatus("AIに送信中...");
 
     try {
       let s3Keys: string[] = [];
@@ -114,8 +114,8 @@ export default function ImageUpload() {
 
       const successMessage =
         images.length > 0
-          ? `アップロード成功！${s3Keys.length}枚の画像をアップロードしました。レシピ生成を開始しました（ジョブID: ${createdJobId}）。`
-          : `レシピ生成を開始しました（ジョブID: ${createdJobId}）。`;
+          ? `AIがレシピを読み取り中です。完了すると「レシピ」一覧に追加されます。`
+          : `AIがレシピを生成中です。完了すると「レシピ」一覧に追加されます。`;
 
       setUploadStatus(successMessage);
       setImages([]);
@@ -192,7 +192,7 @@ export default function ImageUpload() {
         />
         <div className="space-y-2">
           <svg
-            className="mx-auto h-10 w-10 text-stone-400"
+            className="mx-auto h-10 w-10 text-amber-400"
             stroke="currentColor"
             fill="none"
             viewBox="0 0 48 48"
@@ -204,13 +204,13 @@ export default function ImageUpload() {
               strokeLinejoin="round"
             />
           </svg>
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-stone-700 font-medium">
             {images.length >= MAX_IMAGES
               ? "最大3枚までアップロードできます"
-              : "画像をドラッグ&ドロップするか、クリックして選択"}
+              : "レシピの写真やスクリーンショットを追加"}
           </p>
           <p className="text-xs text-stone-500">
-            {images.length}/{MAX_IMAGES} 枚
+            タップして選択 / ドラッグ&ドロップ（{images.length}/{MAX_IMAGES} 枚）
           </p>
         </div>
       </div>
@@ -266,7 +266,7 @@ export default function ImageUpload() {
             text-white
           `}
         >
-          {isUploading ? "アップロード中..." : "レシピを登録"}
+          {isUploading ? "送信中..." : "AIでレシピを読み取る"}
         </button>
       )}
 
@@ -276,7 +276,7 @@ export default function ImageUpload() {
           className={`
             p-3 rounded-lg text-sm
             ${
-              uploadStatus.includes("成功") || uploadStatus.includes("追加")
+              uploadStatus.includes("読み取り中") || uploadStatus.includes("生成中")
                 ? "bg-green-50 text-green-800"
                 : uploadStatus.includes("エラー")
                 ? "bg-red-50 text-red-800"
