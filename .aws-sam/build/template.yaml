@@ -35,6 +35,17 @@ Resources:
       KeySchema:
       - AttributeName: recipeId
         KeyType: HASH
+  CategoriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-categories
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: categoryId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: categoryId
+        KeyType: HASH
   JobQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -106,6 +117,9 @@ Resources:
             - Arn
           - Fn::GetAtt:
             - RecipesTable
+            - Arn
+          - Fn::GetAtt:
+            - CategoriesTable
             - Arn
       - Statement:
         - Effect: Allow
