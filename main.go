@@ -78,8 +78,18 @@ type Recipe struct {
 	Ingredients []string  `json:"ingredients" dynamodbav:"ingredients"`
 	Steps       []string  `json:"steps" dynamodbav:"steps"`
 	ImageKeys   []string  `json:"imageKeys" dynamodbav:"imageKeys"`
+	CategoryIDs []string  `json:"categoryIds,omitempty" dynamodbav:"categoryIds,omitempty"`
 	SourceURL   *string   `json:"sourceUrl" dynamodbav:"sourceUrl,omitempty"`
 	CreatedAt   time.Time `json:"createdAt" dynamodbav:"createdAt"`
+}
+
+type Category struct {
+	CategoryID string    `json:"categoryId" dynamodbav:"categoryId"`
+	UserID     string    `json:"userId" dynamodbav:"userId"`
+	Name       string    `json:"name" dynamodbav:"name"`
+	Color      string    `json:"color" dynamodbav:"color"`
+	CreatedAt  time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 var jobStore = &JobStore{
@@ -418,6 +428,7 @@ func parseRecipeResponse(responseText string, job *Job) (*Recipe, error) {
 		Ingredients: llmResponse.Ingredients,
 		Steps:       llmResponse.Steps,
 		ImageKeys:   imageKeys,
+		CategoryIDs: []string{},
 		SourceURL:   job.SourceURL,
 		CreatedAt:   time.Now(),
 	}
@@ -477,6 +488,7 @@ func generateDummyRecipe(job *Job) *Recipe {
 		Ingredients: ingredients,
 		Steps:       steps,
 		ImageKeys:   imageKeys,
+		CategoryIDs: []string{},
 		SourceURL:   job.SourceURL,
 		CreatedAt:   now,
 	}

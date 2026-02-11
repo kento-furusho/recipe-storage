@@ -2,14 +2,19 @@
 
 import {
   deleteRecipe,
+  getCategories,
   getImageUrl,
   getRecipe,
   Recipe,
+  Category,
   updateRecipe,
 } from "@/lib/api";
+import RecipeImageManager, {
+  RecipeImageManagerRef,
+} from "@/components/RecipeImageManager";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function RecipeDetailPage() {
   const params = useParams();
@@ -23,11 +28,16 @@ export default function RecipeDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingImageKeys, setEditingImageKeys] = useState<string[]>([]);
+  const imageManagerRef = useRef<RecipeImageManagerRef>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
   const [form, setForm] = useState({
     title: "",
     sourceUrl: "",
     ingredientsText: "",
     stepsText: "",
+    selectedCategoryIds: [] as string[],
   });
 
   useEffect(() => {
@@ -40,13 +50,26 @@ export default function RecipeDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await getRecipe(recipeId);
+      const [data, categoryList] = await Promise.all([
+        getRecipe(recipeId),
+        getCategories(),
+      ]);
       setRecipe(data);
+      const sortedCategories = [...categoryList].sort((a, b) =>
+        a.name.localeCompare(b.name, "ja")
+      );
+      setCategories(sortedCategories);
+      const map: Record<string, Category> = {};
+      for (const category of sortedCategories) {
+        map[category.categoryId] = category;
+      }
+      setCategoryMap(map);
       setForm({
         title: data.title,
         sourceUrl: data.sourceUrl || "",
         ingredientsText: (data.ingredients || []).join("\n"),
         stepsText: (data.steps || []).join("\n"),
+        selectedCategoryIds: data.categoryIds || [],
       });
 
       // 画像のpresigned URLを取得
@@ -70,6 +93,19 @@ export default function RecipeDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = () => {
+    if (!recipe) return;
+    setForm({
+      title: recipe.title,
+      sourceUrl: recipe.sourceUrl || "",
+      ingredientsText: (recipe.ingredients || []).join("\n"),
+      stepsText: (recipe.steps || []).join("\n"),
+      selectedCategoryIds: recipe.categoryIds || [],
+    });
+    setEditingImageKeys(recipe.imageKeys || []);
+    setIsEditing(true);
   };
 
   const handleDelete = async () => {
@@ -118,11 +154,17 @@ export default function RecipeDetailPage() {
     try {
       setSaving(true);
       setError(null);
+
+      // 新規画像のアップロード
+      const finalImageKeys = await imageManagerRef.current?.uploadNewImages();
+
       const updated = await updateRecipe(recipeId, {
         title,
         ingredients,
         steps,
         sourceUrl: sourceUrl || undefined,
+        imageKeys: finalImageKeys,
+        categoryIds: form.selectedCategoryIds,
       });
       setRecipe(updated);
       setForm({
@@ -130,8 +172,20 @@ export default function RecipeDetailPage() {
         sourceUrl: updated.sourceUrl || "",
         ingredientsText: (updated.ingredients || []).join("\n"),
         stepsText: (updated.steps || []).join("\n"),
+        selectedCategoryIds: updated.categoryIds || [],
       });
       setIsEditing(false);
+
+      // 画像URLを再取得
+      const urls: Record<string, string> = {};
+      for (const key of updated.imageKeys || []) {
+        try {
+          urls[key] = await getImageUrl(key);
+        } catch (err) {
+          console.error(`Failed to get image URL for ${key}:`, err);
+        }
+      }
+      setImageUrls(urls);
     } catch (err) {
       console.error("Failed to update recipe:", err);
       setError(
@@ -180,6 +234,12 @@ export default function RecipeDetailPage() {
           >
             ← レシピ一覧に戻る
           </Link>
+          <Link
+            href="/categories"
+            className="text-blue-600 hover:text-blue-800 underline"
+          >
+            カテゴリ管理
+          </Link>
           <div className="flex items-center gap-2">
             {isEditing ? (
               <>
@@ -194,7 +254,9 @@ export default function RecipeDetailPage() {
                       sourceUrl: recipe.sourceUrl || "",
                       ingredientsText: (recipe.ingredients || []).join("\n"),
                       stepsText: (recipe.steps || []).join("\n"),
+                      selectedCategoryIds: recipe.categoryIds || [],
                     });
+                    setEditingImageKeys(recipe.imageKeys || []);
                     setError(null);
                     setIsEditing(false);
                   }}
@@ -216,7 +278,7 @@ export default function RecipeDetailPage() {
               <>
                 <button
                   type="button"
-                  onClick={() => setIsEditing(true)}
+                  onClick={handleEdit}
                   className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
                 >
                   編集
@@ -255,7 +317,7 @@ export default function RecipeDetailPage() {
           <div className="p-6">
             {/* タイトル */}
             {isEditing ? (
-              <div className="mb-4">
+              <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   タイトル
                 </label>
@@ -269,15 +331,50 @@ export default function RecipeDetailPage() {
                 />
               </div>
             ) : (
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                {recipe.title}
-              </h1>
+              <div className="mb-4">
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {recipe.title}
+                </h1>
+                {recipe.categoryIds && recipe.categoryIds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {recipe.categoryIds.map((categoryId) => {
+                      const category = categoryMap[categoryId];
+                      if (!category) return null;
+                      return (
+                        <span
+                          key={category.categoryId}
+                          className="px-2 py-1 rounded-full text-xs font-medium"
+                          style={{
+                            backgroundColor: `${category.color}20`,
+                            color: category.color,
+                          }}
+                        >
+                          {category.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* 作成日 */}
             <p className="text-sm text-gray-500 mb-6">
               作成日: {new Date(recipe.createdAt).toLocaleString("ja-JP")}
             </p>
+
+            {/* 画像管理コンポーネント（編集モード時のみ） */}
+            {isEditing && (
+              <div className="mb-6">
+                <RecipeImageManager
+                  ref={imageManagerRef}
+                  currentImageKeys={recipe.imageKeys || []}
+                  currentImageUrls={imageUrls}
+                  recipeId={recipeId}
+                  onImageKeysChange={setEditingImageKeys}
+                />
+              </div>
+            )}
 
             {/* 参照元URL */}
             {isEditing ? (
@@ -314,6 +411,60 @@ export default function RecipeDetailPage() {
               </div>
               )
             )}
+
+            {/* カテゴリ */}
+            {isEditing ? (
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  カテゴリ
+                </label>
+                {categories.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    カテゴリがまだ登録されていません。カテゴリ管理で追加してください。
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {categories.map((category) => (
+                      <label
+                        key={category.categoryId}
+                        className="flex items-center gap-2 rounded border border-gray-200 px-3 py-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.selectedCategoryIds.includes(
+                            category.categoryId
+                          )}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setForm((prev) => {
+                              const current = new Set(prev.selectedCategoryIds);
+                              if (checked) {
+                                current.add(category.categoryId);
+                              } else {
+                                current.delete(category.categoryId);
+                              }
+                              return {
+                                ...prev,
+                                selectedCategoryIds: Array.from(current),
+                              };
+                            });
+                          }}
+                        />
+                        <span
+                          className="inline-flex items-center gap-2 text-sm text-gray-700"
+                        >
+                          <span
+                            className="inline-block h-3 w-3 rounded-full"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          {category.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             {/* 材料 */}
             <div className="mb-6">
@@ -411,7 +562,9 @@ export default function RecipeDetailPage() {
                         sourceUrl: recipe.sourceUrl || "",
                         ingredientsText: (recipe.ingredients || []).join("\n"),
                         stepsText: (recipe.steps || []).join("\n"),
+                        selectedCategoryIds: recipe.categoryIds || [],
                       });
+                      setEditingImageKeys(recipe.imageKeys || []);
                       setError(null);
                       setIsEditing(false);
                     }}
@@ -433,7 +586,7 @@ export default function RecipeDetailPage() {
                 <>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={handleEdit}
                     className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
                   >
                     編集

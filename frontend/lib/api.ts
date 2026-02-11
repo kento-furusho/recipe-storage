@@ -196,6 +196,7 @@ export interface Recipe {
   ingredients: string[];
   steps: string[];
   imageKeys: string[];
+  categoryIds?: string[];
   sourceUrl?: string | null;
   createdAt: string;
 }
@@ -205,6 +206,17 @@ export interface UpdateRecipeRequest {
   ingredients: string[];
   steps: string[];
   sourceUrl?: string;
+  imageKeys?: string[];
+  categoryIds?: string[];
+}
+
+export interface Category {
+  categoryId: string;
+  userId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -270,6 +282,60 @@ export async function updateRecipe(
   }
 
   return response.json();
+}
+
+export async function getCategories(): Promise<Category[]> {
+  const response = await fetch(`${API_BASE_URL}/categories`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get categories: ${errorText}`);
+  }
+  return response.json();
+}
+
+export async function createCategory(
+  body: Pick<Category, "name" | "color">
+): Promise<Category> {
+  const response = await fetch(`${API_BASE_URL}/categories`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create category: ${errorText}`);
+  }
+  return response.json();
+}
+
+export async function updateCategory(
+  categoryId: string,
+  body: Pick<Category, "name" | "color">
+): Promise<Category> {
+  const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update category: ${errorText}`);
+  }
+  return response.json();
+}
+
+export async function deleteCategory(categoryId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to delete category: ${errorText}`);
+  }
 }
 
 /**

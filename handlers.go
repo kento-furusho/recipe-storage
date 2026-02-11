@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +22,25 @@ type UpdateRecipeRequest struct {
 	Ingredients []string `json:"ingredients"`
 	Steps       []string `json:"steps"`
 	SourceURL   *string  `json:"sourceUrl,omitempty"`
+	ImageKeys   []string `json:"imageKeys,omitempty"`
+	CategoryIDs []string `json:"categoryIds,omitempty"`
 }
+
+type CreateCategoryRequest struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+type UpdateCategoryRequest struct {
+	Name  string `json:"name"`
+	Color string `json:"color"`
+}
+
+const (
+	maxCategoryNameLen = 30
+)
+
+var colorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 // handleCreateJob はジョブ作成ハンドラー
 func handleCreateJob(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +250,28 @@ func handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe.Steps = req.Steps
 	recipe.SourceURL = req.SourceURL
 
+	// ImageKeysの更新（nilの場合は既存の値を保持）
+	if req.ImageKeys != nil {
+		if len(req.ImageKeys) > 3 {
+			http.Error(w, "maximum 3 images allowed", http.StatusBadRequest)
+			return
+		}
+		recipe.ImageKeys = req.ImageKeys
+	}
+
+	if req.CategoryIDs != nil {
+		categoryIDs, err := normalizeCategoryIDs(req.CategoryIDs)
+		if err != nil {
+			http.Error(w, "invalid categoryIds", http.StatusBadRequest)
+			return
+		}
+		if err := validateCategoryIDs(ctx, categoryIDs); err != nil {
+			http.Error(w, "invalid categoryIds", http.StatusBadRequest)
+			return
+		}
+		recipe.CategoryIDs = categoryIDs
+	}
+
 	if err := dbStore.SaveRecipe(ctx, recipe); err != nil {
 		log.Printf("Failed to save recipe to DynamoDB: %v", err)
 		http.Error(w, "failed to update recipe", http.StatusInternalServerError)
@@ -292,4 +337,223 @@ func handleGetUploadURL(w http.ResponseWriter, r *http.Request) {
 		UploadURL: putReq.URL,
 		S3Key:     key,
 	})
+}
+
+func normalizeCategoryIDs(values []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result, nil
+}
+
+func validateCategoryIDs(ctx context.Context, categoryIDs []string) error {
+	for _, id := range categoryIDs {
+		category, err := dbStore.GetCategory(ctx, id)
+		if err != nil {
+			return err
+		}
+		if category == nil {
+			return fmt.Errorf("category not found: %s", id)
+		}
+	}
+	return nil
+}
+
+func validateCategoryInput(name string, color string) (string, string, error) {
+	trimmedName := strings.TrimSpace(name)
+	if trimmedName == "" {
+		return "", "", fmt.Errorf("name required")
+	}
+	if len([]rune(trimmedName)) > maxCategoryNameLen {
+		return "", "", fmt.Errorf("name too long")
+	}
+	trimmedColor := strings.TrimSpace(color)
+	if !colorPattern.MatchString(trimmedColor) {
+		return "", "", fmt.Errorf("invalid color")
+	}
+	return trimmedName, trimmedColor, nil
+}
+
+// handleGetCategories はカテゴリ一覧取得ハンドラー
+func handleGetCategories(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := "local"
+
+	categories, err := dbStore.ListCategories(ctx, userID)
+	if err != nil {
+		log.Printf("Failed to list categories: %v", err)
+		http.Error(w, "failed to list categories", http.StatusInternalServerError)
+		return
+	}
+
+	sort.Slice(categories, func(i, j int) bool {
+		return categories[i].Name < categories[j].Name
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(categories)
+}
+
+// handleCreateCategory はカテゴリ作成ハンドラー
+func handleCreateCategory(w http.ResponseWriter, r *http.Request) {
+	var req CreateCategoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	name, color, err := validateCategoryInput(req.Name, req.Color)
+	if err != nil {
+		http.Error(w, "invalid category", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	userID := "local"
+	existing, err := dbStore.ListCategories(ctx, userID)
+	if err != nil {
+		http.Error(w, "failed to list categories", http.StatusInternalServerError)
+		return
+	}
+	for _, category := range existing {
+		if category.Name == name {
+			http.Error(w, "category name already exists", http.StatusBadRequest)
+			return
+		}
+	}
+
+	now := time.Now()
+	category := &Category{
+		CategoryID: uuid.New().String(),
+		UserID:     userID,
+		Name:       name,
+		Color:      color,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	if err := dbStore.SaveCategory(ctx, category); err != nil {
+		http.Error(w, "failed to save category", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(category)
+}
+
+// handleUpdateCategory はカテゴリ更新ハンドラー
+func handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
+	categoryID := chi.URLParam(r, "categoryId")
+	if categoryID == "" {
+		http.Error(w, "categoryId required", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateCategoryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	name, color, err := validateCategoryInput(req.Name, req.Color)
+	if err != nil {
+		http.Error(w, "invalid category", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	existingCategory, err := dbStore.GetCategory(ctx, categoryID)
+	if err != nil {
+		http.Error(w, "failed to get category", http.StatusInternalServerError)
+		return
+	}
+	if existingCategory == nil {
+		http.Error(w, "category not found", http.StatusNotFound)
+		return
+	}
+
+	allCategories, err := dbStore.ListCategories(ctx, existingCategory.UserID)
+	if err != nil {
+		http.Error(w, "failed to list categories", http.StatusInternalServerError)
+		return
+	}
+	for _, category := range allCategories {
+		if category.Name == name && category.CategoryID != categoryID {
+			http.Error(w, "category name already exists", http.StatusBadRequest)
+			return
+		}
+	}
+
+	existingCategory.Name = name
+	existingCategory.Color = color
+	existingCategory.UpdatedAt = time.Now()
+	if err := dbStore.SaveCategory(ctx, existingCategory); err != nil {
+		http.Error(w, "failed to update category", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(existingCategory)
+}
+
+// handleDeleteCategory はカテゴリ削除ハンドラー
+func handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
+	categoryID := chi.URLParam(r, "categoryId")
+	if categoryID == "" {
+		http.Error(w, "categoryId required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	category, err := dbStore.GetCategory(ctx, categoryID)
+	if err != nil {
+		http.Error(w, "failed to get category", http.StatusInternalServerError)
+		return
+	}
+	if category == nil {
+		http.Error(w, "category not found", http.StatusNotFound)
+		return
+	}
+
+	if err := dbStore.DeleteCategory(ctx, categoryID); err != nil {
+		http.Error(w, "failed to delete category", http.StatusInternalServerError)
+		return
+	}
+
+	recipes, err := dbStore.ListRecipes(ctx, category.UserID)
+	if err == nil {
+		for _, recipe := range recipes {
+			if len(recipe.CategoryIDs) == 0 {
+				continue
+			}
+			updated := removeCategoryID(recipe.CategoryIDs, categoryID)
+			if len(updated) != len(recipe.CategoryIDs) {
+				recipe.CategoryIDs = updated
+				_ = dbStore.SaveRecipe(ctx, recipe)
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func removeCategoryID(values []string, target string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == target {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
 }

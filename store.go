@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	jobsTableName    = "recipe-jobs"
-	recipesTableName = "recipe-recipes"
+	jobsTableName       = "recipe-jobs"
+	recipesTableName    = "recipe-recipes"
+	categoriesTableName = "recipe-categories"
 )
 
 // DynamoDBStore はDynamoDBを使用したストレージ実装
@@ -139,6 +140,83 @@ func (s *DynamoDBStore) ListRecipes(ctx context.Context, userID string) ([]*Reci
 	}
 
 	return recipes, nil
+}
+
+// SaveCategory はカテゴリをDynamoDBに保存する
+func (s *DynamoDBStore) SaveCategory(ctx context.Context, category *Category) error {
+	item, err := attributevalue.MarshalMap(category)
+	if err != nil {
+		return fmt.Errorf("failed to marshal category: %w", err)
+	}
+
+	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(categoriesTableName),
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to put category: %w", err)
+	}
+	return nil
+}
+
+// GetCategory はカテゴリをDynamoDBから取得する
+func (s *DynamoDBStore) GetCategory(ctx context.Context, categoryID string) (*Category, error) {
+	result, err := dynamoClient.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(categoriesTableName),
+		Key: map[string]types.AttributeValue{
+			"categoryId": &types.AttributeValueMemberS{Value: categoryID},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get category: %w", err)
+	}
+	if result.Item == nil {
+		return nil, nil
+	}
+
+	var category Category
+	if err := attributevalue.UnmarshalMap(result.Item, &category); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal category: %w", err)
+	}
+	return &category, nil
+}
+
+// DeleteCategory はカテゴリをDynamoDBから削除する
+func (s *DynamoDBStore) DeleteCategory(ctx context.Context, categoryID string) error {
+	_, err := dynamoClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(categoriesTableName),
+		Key: map[string]types.AttributeValue{
+			"categoryId": &types.AttributeValueMemberS{Value: categoryID},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete category: %w", err)
+	}
+	return nil
+}
+
+// ListCategories はカテゴリ一覧をDynamoDBから取得する
+func (s *DynamoDBStore) ListCategories(ctx context.Context, userID string) ([]*Category, error) {
+	result, err := dynamoClient.Scan(ctx, &dynamodb.ScanInput{
+		TableName:        aws.String(categoriesTableName),
+		FilterExpression: aws.String("userId = :userId"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":userId": &types.AttributeValueMemberS{Value: userID},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan categories: %w", err)
+	}
+
+	categories := make([]*Category, 0, len(result.Items))
+	for _, item := range result.Items {
+		var category Category
+		if err := attributevalue.UnmarshalMap(item, &category); err != nil {
+			continue
+		}
+		categories = append(categories, &category)
+	}
+	return categories, nil
 }
 
 var dbStore = &DynamoDBStore{}
