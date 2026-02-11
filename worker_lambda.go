@@ -41,6 +41,7 @@ func initWorker() {
 	bedrockClient = bedrockruntime.NewFromConfig(awsCfg)
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 	bucketName = bucket
+	youtubeAPIKey = os.Getenv("YOUTUBE_API_KEY")
 }
 
 func WorkerHandler(ctx context.Context, event events.SQSEvent) error {
