@@ -211,7 +211,7 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
 
     return (
       <div className="space-y-4">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-stone-700">
           画像 ({totalImages}/{MAX_IMAGES}枚)
         </label>
 
@@ -221,7 +221,7 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
             {/* 既存画像 */}
             {imageKeys.map((key, index) => (
               <div key={`existing-${key}`} className="relative group">
-                <div className="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
+                <div className="aspect-square rounded-lg overflow-hidden border border-amber-50 bg-amber-50/40">
                   <img
                     src={currentImageUrls[key] || ""}
                     alt={`既存画像 ${index + 1}`}
@@ -256,14 +256,14 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
             {/* 新規画像 */}
             {newImages.map((image, index) => (
               <div key={`new-${index}`} className="relative group">
-                <div className="aspect-square rounded-lg overflow-hidden border border-blue-300 bg-gray-100">
+                <div className="aspect-square rounded-lg overflow-hidden border border-amber-100 bg-amber-50/40">
                   <img
                     src={image.preview}
                     alt={`新規画像 ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                <div className="absolute top-2 left-2 bg-amber-400 text-white text-xs px-2 py-1 rounded">
                   新規
                 </div>
                 {!disabled && (
@@ -303,8 +303,8 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
               border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
               ${
                 isDragging
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-300 bg-gray-50 hover:border-gray-400"
+                  ? "border-amber-400 bg-amber-50/60"
+                  : "border-amber-100 bg-amber-50/40 hover:border-amber-200"
               }
             `}
             onClick={() => {
@@ -323,7 +323,7 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
             />
             <div className="space-y-2">
               <svg
-                className="mx-auto h-10 w-10 text-gray-400"
+                className="mx-auto h-10 w-10 text-stone-400"
                 stroke="currentColor"
                 fill="none"
                 viewBox="0 0 48 48"
@@ -335,10 +335,10 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
                   strokeLinejoin="round"
                 />
               </svg>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-stone-600">
                 画像をドラッグ&ドロップするか、クリックして選択
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-stone-500">
                 残り{remainingSlots}枚追加できます
               </p>
             </div>
@@ -354,7 +354,7 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
 
         {/* アップロード中の表示 */}
         {isUploading && (
-          <div className="p-3 rounded-lg text-sm bg-blue-50 text-blue-800">
+          <div className="p-3 rounded-lg text-sm bg-amber-50/60 text-amber-800">
             画像をアップロード中...
           </div>
         )}

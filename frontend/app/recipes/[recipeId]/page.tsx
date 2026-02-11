@@ -198,7 +198,7 @@ export default function RecipeDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-[#F6F1EB] py-8">
         <div className="container mx-auto px-4">
           <div className="text-center">読み込み中...</div>
         </div>
@@ -208,14 +208,14 @@ export default function RecipeDetailPage() {
 
   if (error || !recipe) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-[#F6F1EB] py-8">
         <div className="container mx-auto px-4">
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
             {error || "レシピが見つかりません"}
           </div>
           <Link
             href="/recipes"
-            className="text-blue-600 hover:text-blue-800 underline"
+            className="text-amber-700 hover:text-amber-900 underline"
           >
             レシピ一覧に戻る
           </Link>
@@ -225,18 +225,18 @@ export default function RecipeDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-[#F6F1EB] py-8">
       <div className="container mx-auto px-4 max-w-4xl">
         <div className="mb-6 flex items-center justify-between gap-4">
           <Link
             href="/recipes"
-            className="text-blue-600 hover:text-blue-800 underline"
+            className="text-amber-700 hover:text-amber-900 underline"
           >
             ← レシピ一覧に戻る
           </Link>
           <Link
             href="/categories"
-            className="text-blue-600 hover:text-blue-800 underline"
+            className="text-amber-700 hover:text-amber-900 underline"
           >
             カテゴリ管理
           </Link>
@@ -261,7 +261,7 @@ export default function RecipeDetailPage() {
                     setIsEditing(false);
                   }}
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   キャンセル
                 </button>
@@ -269,7 +269,7 @@ export default function RecipeDetailPage() {
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? "保存中..." : "保存"}
                 </button>
@@ -279,7 +279,7 @@ export default function RecipeDetailPage() {
                 <button
                   type="button"
                   onClick={handleEdit}
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
                 >
                   編集
                 </button>
@@ -296,10 +296,10 @@ export default function RecipeDetailPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
           {/* 画像 */}
           {recipe.imageKeys && recipe.imageKeys.length > 0 && (
-            <div className="aspect-video bg-gray-200">
+            <div className="aspect-video bg-amber-50/60">
               {imageUrls[recipe.imageKeys[0]] ? (
                 <img
                   src={imageUrls[recipe.imageKeys[0]]}
@@ -307,7 +307,7 @@ export default function RecipeDetailPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
                   画像読み込み中...
                 </div>
               )}
@@ -318,7 +318,7 @@ export default function RecipeDetailPage() {
             {/* タイトル */}
             {isEditing ? (
               <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
                   タイトル
                 </label>
                 <input
@@ -327,12 +327,12 @@ export default function RecipeDetailPage() {
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, title: event.target.value }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
                 />
               </div>
             ) : (
               <div className="mb-4">
-                <h1 className="text-3xl font-bold text-gray-900">
+                <h1 className="text-3xl font-bold text-stone-800">
                   {recipe.title}
                 </h1>
                 {recipe.categoryIds && recipe.categoryIds.length > 0 && (
@@ -359,7 +359,7 @@ export default function RecipeDetailPage() {
             )}
 
             {/* 作成日 */}
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-stone-500 mb-6">
               作成日: {new Date(recipe.createdAt).toLocaleString("ja-JP")}
             </p>
 
@@ -379,7 +379,7 @@ export default function RecipeDetailPage() {
             {/* 参照元URL */}
             {isEditing ? (
               <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
                   参照元URL
                 </label>
                 <input
@@ -391,20 +391,20 @@ export default function RecipeDetailPage() {
                       sourceUrl: event.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
                 />
               </div>
             ) : (
               recipe.sourceUrl && (
               <div className="mb-6">
-                <h2 className="text-sm font-semibold text-gray-700 mb-2">
+                <h2 className="text-sm font-semibold text-stone-700 mb-2">
                   参照元
                 </h2>
                 <a
                   href={recipe.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 underline break-all"
+                  className="text-amber-700 hover:text-amber-900 underline break-all"
                 >
                   {recipe.sourceUrl}
                 </a>
@@ -415,11 +415,11 @@ export default function RecipeDetailPage() {
             {/* カテゴリ */}
             {isEditing ? (
               <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
                   カテゴリ
                 </label>
                 {categories.length === 0 ? (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-stone-500">
                     カテゴリがまだ登録されていません。カテゴリ管理で追加してください。
                   </p>
                 ) : (
@@ -427,7 +427,7 @@ export default function RecipeDetailPage() {
                     {categories.map((category) => (
                       <label
                         key={category.categoryId}
-                        className="flex items-center gap-2 rounded border border-gray-200 px-3 py-2"
+                        className="flex items-center gap-2 rounded border border-amber-50 bg-amber-50/30 px-3 py-2"
                       >
                         <input
                           type="checkbox"
@@ -450,9 +450,7 @@ export default function RecipeDetailPage() {
                             });
                           }}
                         />
-                        <span
-                          className="inline-flex items-center gap-2 text-sm text-gray-700"
-                        >
+                        <span className="inline-flex items-center gap-2 text-sm text-stone-700">
                           <span
                             className="inline-block h-3 w-3 rounded-full"
                             style={{ backgroundColor: category.color }}
@@ -468,7 +466,7 @@ export default function RecipeDetailPage() {
 
             {/* 材料 */}
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-3">材料</h2>
+              <h2 className="text-xl font-semibold text-stone-800 mb-3">材料</h2>
               {isEditing ? (
                 <textarea
                   value={form.ingredientsText}
@@ -479,12 +477,12 @@ export default function RecipeDetailPage() {
                     }))
                   }
                   rows={6}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
                 />
               ) : (
                 <ul className="list-disc list-inside space-y-1">
                   {recipe.ingredients.map((ingredient, index) => (
-                    <li key={index} className="text-gray-700">
+                    <li key={index} className="text-stone-700">
                       {ingredient}
                     </li>
                   ))}
@@ -494,7 +492,7 @@ export default function RecipeDetailPage() {
 
             {/* 手順 */}
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-3">手順</h2>
+              <h2 className="text-xl font-semibold text-stone-800 mb-3">手順</h2>
               {isEditing ? (
                 <textarea
                   value={form.stepsText}
@@ -505,12 +503,12 @@ export default function RecipeDetailPage() {
                     }))
                   }
                   rows={8}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
                 />
               ) : (
                 <ol className="list-decimal list-inside space-y-2">
                   {recipe.steps.map((step, index) => (
-                    <li key={index} className="text-gray-700">
+                    <li key={index} className="text-stone-700">
                       {step}
                     </li>
                   ))}
@@ -521,14 +519,14 @@ export default function RecipeDetailPage() {
             {/* 画像一覧 */}
             {recipe.imageKeys && recipe.imageKeys.length > 1 && (
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-3">
+                <h2 className="text-xl font-semibold text-stone-800 mb-3">
                   画像
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {recipe.imageKeys.slice(1).map((imageKey, index) => (
                     <div
                       key={index}
-                      className="aspect-square bg-gray-200 rounded overflow-hidden"
+                      className="aspect-square bg-amber-100/60 rounded overflow-hidden"
                     >
                       {imageUrls[imageKey] ? (
                         <img
@@ -537,7 +535,7 @@ export default function RecipeDetailPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                        <div className="w-full h-full flex items-center justify-center text-stone-400 text-sm">
                           読み込み中...
                         </div>
                       )}
@@ -548,7 +546,7 @@ export default function RecipeDetailPage() {
             )}
 
             {/* 下部の編集・削除ボタン */}
-            <div className="mt-6 pt-6 border-t border-gray-200 flex items-center justify-end gap-2">
+            <div className="mt-6 pt-6 border-t border-amber-50 flex items-center justify-end gap-2">
               {isEditing ? (
                 <>
                   <button
@@ -569,7 +567,7 @@ export default function RecipeDetailPage() {
                       setIsEditing(false);
                     }}
                     disabled={saving}
-                    className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     キャンセル
                   </button>
@@ -577,7 +575,7 @@ export default function RecipeDetailPage() {
                     type="button"
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving ? "保存中..." : "保存"}
                   </button>
@@ -587,7 +585,7 @@ export default function RecipeDetailPage() {
                   <button
                     type="button"
                     onClick={handleEdit}
-                    className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                    className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
                   >
                     編集
                   </button>

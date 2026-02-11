@@ -206,7 +206,7 @@ export default function RecipesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-[#F6F1EB] py-8">
         <div className="container mx-auto px-4">
           <div className="text-center">読み込み中...</div>
         </div>
@@ -216,9 +216,9 @@ export default function RecipesPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-[#F6F1EB] py-8">
         <div className="container mx-auto px-4">
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
             {error}
           </div>
         </div>
@@ -227,18 +227,18 @@ export default function RecipesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-[#F6F1EB] py-8">
       <div className="container mx-auto px-4">
         <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">レシピ一覧</h1>
+            <h1 className="text-4xl font-bold text-stone-800">レシピ一覧</h1>
             {allCategories.length > 0 && (
               <div className="mt-3 flex items-center gap-2">
-                <label className="text-sm text-gray-600">カテゴリ</label>
+                <label className="text-sm text-stone-600">カテゴリ</label>
                 <select
                   value={selectedCategory}
                   onChange={(event) => setSelectedCategory(event.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                  className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm text-stone-700"
                 >
                   <option value="all">すべて</option>
                   {allCategories.map((category) => (
@@ -252,7 +252,7 @@ export default function RecipesPage() {
           </div>
           <Link
             href="/"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm"
           >
             新規登録
           </Link>
@@ -260,35 +260,35 @@ export default function RecipesPage() {
         <div className="mb-6">
           <Link
             href="/categories"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-gray-900"
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-100 bg-white px-4 py-2 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-amber-50/60 hover:text-stone-900"
           >
             <span
               className="inline-flex h-2.5 w-2.5 rounded-full"
-              style={{ background: "linear-gradient(135deg, #60a5fa, #34d399)" }}
+              style={{ background: "linear-gradient(135deg, #f3c2a1, #f0b38a)" }}
             />
             カテゴリ管理へ
           </Link>
         </div>
 
         {allCategories.length > 0 && (
-          <details className="mb-8 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <details className="mb-8 rounded-lg border border-amber-50 bg-white p-4 shadow-lg">
             <summary className="flex cursor-pointer list-none items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-stone-800">
                   一括カテゴリ追加
                 </h2>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-stone-500">
                   一覧からレシピを選択し、カテゴリを追加します（最大{bulkLimit}件）
                 </p>
               </div>
-              <span className="text-sm text-gray-500">開く</span>
+              <span className="text-sm text-stone-500">開く</span>
             </summary>
 
             <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">全選択</label>
+                <label className="text-sm text-stone-600">全選択</label>
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-stone-500">
                   選択中: {selectedRecipeIds.size}件
                 </span>
               </div>
@@ -298,7 +298,7 @@ export default function RecipesPage() {
               {allCategories.map((category) => (
                 <label
                   key={category.categoryId}
-                  className="flex items-center gap-2 rounded border border-gray-200 px-3 py-2 text-sm"
+                  className="flex items-center gap-2 rounded border border-amber-50 bg-amber-50/30 px-3 py-2 text-sm text-stone-700"
                 >
                   <input
                     type="checkbox"
@@ -315,13 +315,13 @@ export default function RecipesPage() {
             </div>
 
             {bulkError && (
-              <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {bulkError}
               </div>
             )}
 
             {bulkResult && (
-              <div className="mt-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
                 更新成功: {bulkResult.updatedIds.length}件
                 {bulkResult.failed.length > 0 && (
                   <div className="mt-2 text-sm text-red-700">
@@ -343,7 +343,7 @@ export default function RecipesPage() {
                 type="button"
                 onClick={handleBulkAssign}
                 disabled={bulkLoading}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
               >
                 {bulkLoading ? "処理中..." : "一括追加"}
               </button>
@@ -353,19 +353,19 @@ export default function RecipesPage() {
 
         {recipes.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-600 text-lg mb-4">
+            <p className="text-stone-600 text-lg mb-4">
               まだレシピが登録されていません
             </p>
             <Link
               href="/"
-              className="text-blue-600 hover:text-blue-800 underline"
+              className="text-amber-700 hover:text-amber-900 underline"
             >
               最初のレシピを登録する
             </Link>
           </div>
         ) : filteredRecipes.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-600 text-lg mb-4">
+            <p className="text-stone-600 text-lg mb-4">
               選択したカテゴリのレシピがありません
             </p>
           </div>
@@ -374,13 +374,13 @@ export default function RecipesPage() {
             {filteredRecipes.map((recipe) => (
               <div
                 key={recipe.recipeId}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
               >
                 <div
-                  className="flex items-center justify-between px-4 py-3 border-b border-gray-100 cursor-pointer"
+                  className="flex items-center justify-between px-4 py-3 border-b border-amber-50 cursor-pointer"
                   onClick={() => toggleSelectRecipe(recipe.recipeId)}
                 >
-                  <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <label className="flex items-center gap-2 text-sm text-stone-600">
                     <input
                       type="checkbox"
                       checked={selectedRecipeIds.has(recipe.recipeId)}
@@ -393,7 +393,7 @@ export default function RecipesPage() {
                     <Link
                       href={`/recipes/${recipe.recipeId}`}
                       onClick={(event) => event.stopPropagation()}
-                      className="p-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
+                      className="p-2 rounded-full border border-amber-50 text-stone-600 hover:bg-amber-50/60"
                       aria-label="編集"
                     >
                       <svg
@@ -443,7 +443,7 @@ export default function RecipesPage() {
                 </div>
                 <Link href={`/recipes/${recipe.recipeId}`}>
                   {recipe.imageKeys && recipe.imageKeys.length > 0 && (
-                    <div className="aspect-video bg-gray-200 relative">
+                    <div className="aspect-video bg-amber-50/60 relative">
                       {imageUrls[recipe.imageKeys[0]] ? (
                         <img
                           src={imageUrls[recipe.imageKeys[0]]}
@@ -451,14 +451,14 @@ export default function RecipesPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                        <div className="w-full h-full flex items-center justify-center text-stone-400 text-sm">
                           読み込み中...
                         </div>
                       )}
                     </div>
                   )}
                   <div className="p-4">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    <h2 className="text-xl font-semibold text-stone-800 mb-2">
                       {recipe.title}
                     </h2>
                     {recipe.categoryIds && recipe.categoryIds.length > 0 && (
@@ -481,7 +481,7 @@ export default function RecipesPage() {
                         })}
                       </div>
                     )}
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-stone-500">
                       {new Date(recipe.createdAt).toLocaleString("ja-JP")}
                     </p>
                   </div>

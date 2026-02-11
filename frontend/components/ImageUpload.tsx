@@ -145,13 +145,13 @@ export default function ImageUpload() {
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6 space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">レシピを登録</h2>
+      <h2 className="text-2xl font-bold text-stone-800">レシピを登録</h2>
 
       {/* URL入力フィールド */}
       <div className="space-y-2">
         <label
           htmlFor="sourceUrl"
-          className="block text-sm font-medium text-gray-700"
+          className="block text-sm font-medium text-stone-700"
         >
           レシピURL（任意）
         </label>
@@ -161,9 +161,9 @@ export default function ImageUpload() {
           value={sourceUrl}
           onChange={(e) => setSourceUrl(e.target.value)}
           placeholder="https://example.com/recipe または https://youtube.com/watch?v=..."
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-4 py-2 border border-amber-100 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
         />
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-stone-500">
           レシピサイトのURLやYouTube動画URLを入力できます
         </p>
       </div>
@@ -177,8 +177,8 @@ export default function ImageUpload() {
           border-2 border-dashed rounded-lg p-8 text-center transition-colors
           ${
             isDragging
-              ? "border-blue-500 bg-blue-50"
-              : "border-gray-300 bg-gray-50 hover:border-gray-400"
+              ? "border-amber-400 bg-amber-50/60"
+              : "border-amber-100 bg-amber-50/40 hover:border-amber-200"
           }
           ${
             images.length >= MAX_IMAGES
@@ -203,7 +203,7 @@ export default function ImageUpload() {
         />
         <div className="space-y-2">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400"
+            className="mx-auto h-12 w-12 text-stone-400"
             stroke="currentColor"
             fill="none"
             viewBox="0 0 48 48"
@@ -215,12 +215,12 @@ export default function ImageUpload() {
               strokeLinejoin="round"
             />
           </svg>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-stone-600">
             {images.length >= MAX_IMAGES
               ? "最大3枚までアップロードできます"
               : "画像をドラッグ&ドロップするか、クリックして選択"}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-stone-500">
             {images.length}/{MAX_IMAGES} 枚
           </p>
         </div>
@@ -231,7 +231,7 @@ export default function ImageUpload() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {images.map((image, index) => (
             <div key={index} className="relative group">
-              <div className="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
+              <div className="aspect-square rounded-lg overflow-hidden border border-amber-50 bg-amber-50/40">
                 <img
                   src={image.preview}
                   alt={`Preview ${index + 1}`}
@@ -272,8 +272,8 @@ export default function ImageUpload() {
               px-6 py-3 rounded-lg font-medium transition-colors
               ${
                 isUploading
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
+                  ? "bg-stone-300 cursor-not-allowed"
+                  : "bg-amber-500 hover:bg-amber-600"
               }
               text-white
             `}
@@ -293,7 +293,7 @@ export default function ImageUpload() {
                 ? "bg-green-50 text-green-800"
                 : uploadStatus.includes("エラー")
                 ? "bg-red-50 text-red-800"
-                : "bg-blue-50 text-blue-800"
+                : "bg-amber-50 text-amber-800"
             }
           `}
         >
