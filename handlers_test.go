@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -507,4 +508,555 @@ func TestHandleGetRecipes_UserIsolation(t *testing.T) {
 	if recipes[0].RecipeID != "r1" {
 		t.Errorf("got recipeID = %s, want r1", recipes[0].RecipeID)
 	}
+}
+
+// --- Tests for utility functions ---
+
+func TestNormalizeCategoryIDs(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  int
+	}{
+		{"empty", []string{}, 0},
+		{"nil", nil, 0},
+		{"single", []string{"a"}, 1},
+		{"duplicates removed", []string{"a", "b", "a"}, 2},
+		{"whitespace trimmed", []string{" a ", "b"}, 2},
+		{"blanks removed", []string{"", " ", "a"}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeCategoryIDs(tt.input)
+			if len(got) != tt.want {
+				t.Errorf("len = %d, want %d (got %v)", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
+func TestValidateCategoryInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		inName  string
+		inColor string
+		wantErr bool
+	}{
+		{"valid", "Dinner", "#FF0000", false},
+		{"valid lowercase color", "Lunch", "#aabbcc", false},
+		{"empty name", "", "#FF0000", true},
+		{"whitespace name", "   ", "#FF0000", true},
+		{"name too long", "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほま", "#FF0000", true},
+		{"invalid color no hash", "Test", "FF0000", true},
+		{"invalid color short", "Test", "#FFF", true},
+		{"invalid color chars", "Test", "#GGGGGG", true},
+		{"empty color", "Test", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := validateCategoryInput(tt.inName, tt.inColor)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRemoveCategoryID(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []string
+		target string
+		want   int
+	}{
+		{"remove existing", []string{"a", "b", "c"}, "b", 2},
+		{"target not found", []string{"a", "b"}, "z", 2},
+		{"empty slice", []string{}, "a", 0},
+		{"remove all occurrences", []string{"a", "a", "b"}, "a", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := removeCategoryID(tt.values, tt.target)
+			if len(got) != tt.want {
+				t.Errorf("len = %d, want %d", len(got), tt.want)
+			}
+		})
+	}
+}
+
+func TestMergeCategoryIDs(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		add      []string
+		want     int
+	}{
+		{"merge disjoint", []string{"a"}, []string{"b"}, 2},
+		{"merge with overlap", []string{"a", "b"}, []string{"b", "c"}, 3},
+		{"empty existing", nil, []string{"a"}, 1},
+		{"empty add", []string{"a"}, nil, 1},
+		{"both empty", nil, nil, 0},
+		{"blanks removed", []string{"a", ""}, []string{" ", "b"}, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeCategoryIDs(tt.existing, tt.add)
+			if len(got) != tt.want {
+				t.Errorf("len = %d, want %d (got %v)", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
+// --- Tests for handler validation ---
+
+func TestHandleUpdateRecipe_Validation(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.recipes["r1"] = &Recipe{
+		RecipeID:    "r1",
+		UserID:      "user-1",
+		Title:       "Original",
+		Ingredients: []string{"a"},
+		Steps:       []string{"b"},
+		ImageKeys:   []string{},
+	}
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "missing title",
+			body:       UpdateRecipeRequest{Title: "", Ingredients: []string{"a"}, Steps: []string{"b"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "title required",
+		},
+		{
+			name:       "missing ingredients",
+			body:       UpdateRecipeRequest{Title: "T", Ingredients: []string{}, Steps: []string{"b"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "ingredients required",
+		},
+		{
+			name:       "missing steps",
+			body:       UpdateRecipeRequest{Title: "T", Ingredients: []string{"a"}, Steps: []string{}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "steps required",
+		},
+		{
+			name:       "too many images",
+			body:       UpdateRecipeRequest{Title: "T", Ingredients: []string{"a"}, Steps: []string{"b"}, ImageKeys: []string{"1", "2", "3", "4"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "maximum 3 images",
+		},
+		{
+			name:       "invalid categoryIds",
+			body:       UpdateRecipeRequest{Title: "T", Ingredients: []string{"a"}, Steps: []string{"b"}, CategoryIDs: []string{"nonexistent"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid categoryIds",
+		},
+		{
+			name:       "valid update",
+			body:       UpdateRecipeRequest{Title: "New", Ingredients: []string{"x"}, Steps: []string{"y"}},
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.body)
+			r := reqAsUser("PUT", "/recipes/r1", body, "user-1")
+			r = withChiURLParam(r, "recipeId", "r1")
+			w := httptest.NewRecorder()
+			handleUpdateRecipe(w, r)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if tt.wantBody != "" && !containsString(w.Body.String(), tt.wantBody) {
+				t.Errorf("body = %q, want to contain %q", w.Body.String(), tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestHandleUpdateRecipe_InvalidJSON(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.recipes["r1"] = &Recipe{
+		RecipeID: "r1",
+		UserID:   "user-1",
+	}
+
+	r := reqAsUser("PUT", "/recipes/r1", []byte("not json"), "user-1")
+	r = withChiURLParam(r, "recipeId", "r1")
+	w := httptest.NewRecorder()
+	handleUpdateRecipe(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdateRecipe_WithValidCategories(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.recipes["r1"] = &Recipe{
+		RecipeID:    "r1",
+		UserID:      "user-1",
+		Title:       "Original",
+		Ingredients: []string{"a"},
+		Steps:       []string{"b"},
+		ImageKeys:   []string{},
+	}
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1",
+		UserID:     "user-1",
+		Name:       "Dinner",
+		Color:      "#FF0000",
+	}
+
+	body, _ := json.Marshal(UpdateRecipeRequest{
+		Title:       "Updated",
+		Ingredients: []string{"x"},
+		Steps:       []string{"y"},
+		CategoryIDs: []string{"cat-1"},
+	})
+
+	r := reqAsUser("PUT", "/recipes/r1", body, "user-1")
+	r = withChiURLParam(r, "recipeId", "r1")
+	w := httptest.NewRecorder()
+	handleUpdateRecipe(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var recipe Recipe
+	json.NewDecoder(w.Body).Decode(&recipe)
+	if len(recipe.CategoryIDs) != 1 || recipe.CategoryIDs[0] != "cat-1" {
+		t.Errorf("categoryIDs = %v, want [cat-1]", recipe.CategoryIDs)
+	}
+}
+
+func TestHandleGetCategories(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	t.Run("empty list", func(t *testing.T) {
+		r := reqAsUser("GET", "/categories", nil, "user-1")
+		w := httptest.NewRecorder()
+		handleGetCategories(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		var cats []*Category
+		json.NewDecoder(w.Body).Decode(&cats)
+		if len(cats) != 0 {
+			t.Errorf("got %d categories, want 0", len(cats))
+		}
+	})
+
+	t.Run("sorted by name", func(t *testing.T) {
+		mock.categories["c1"] = &Category{CategoryID: "c1", UserID: "user-1", Name: "Dinner", Color: "#FF0000"}
+		mock.categories["c2"] = &Category{CategoryID: "c2", UserID: "user-1", Name: "Breakfast", Color: "#00FF00"}
+		mock.categories["c3"] = &Category{CategoryID: "c3", UserID: "user-other", Name: "Other", Color: "#0000FF"}
+
+		r := reqAsUser("GET", "/categories", nil, "user-1")
+		w := httptest.NewRecorder()
+		handleGetCategories(w, r)
+
+		var cats []*Category
+		json.NewDecoder(w.Body).Decode(&cats)
+		if len(cats) != 2 {
+			t.Fatalf("got %d, want 2", len(cats))
+		}
+		if cats[0].Name != "Breakfast" || cats[1].Name != "Dinner" {
+			t.Errorf("order = [%s, %s], want [Breakfast, Dinner]", cats[0].Name, cats[1].Name)
+		}
+	})
+}
+
+func TestHandleCreateCategory(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+	}{
+		{
+			name:       "valid",
+			body:       CreateCategoryRequest{Name: "Dinner", Color: "#FF0000"},
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name:       "invalid - empty name",
+			body:       CreateCategoryRequest{Name: "", Color: "#FF0000"},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid - bad color",
+			body:       CreateCategoryRequest{Name: "Test", Color: "red"},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, cleanup := setupTest()
+			defer cleanup()
+			_ = mock
+
+			body, _ := json.Marshal(tt.body)
+			r := reqAsUser("POST", "/categories", body, "user-1")
+			w := httptest.NewRecorder()
+			handleCreateCategory(w, r)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandleCreateCategory_DuplicateName(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1",
+		UserID:     "user-1",
+		Name:       "Dinner",
+		Color:      "#FF0000",
+	}
+
+	body, _ := json.Marshal(CreateCategoryRequest{Name: "Dinner", Color: "#00FF00"})
+	r := reqAsUser("POST", "/categories", body, "user-1")
+	w := httptest.NewRecorder()
+	handleCreateCategory(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if !containsString(w.Body.String(), "already exists") {
+		t.Errorf("body = %q, want to contain 'already exists'", w.Body.String())
+	}
+}
+
+func TestHandleCreateCategory_InvalidJSON(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	r := reqAsUser("POST", "/categories", []byte("not json"), "user-1")
+	w := httptest.NewRecorder()
+	handleCreateCategory(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdateCategory_Validation(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1",
+		UserID:     "user-1",
+		Name:       "Dinner",
+		Color:      "#FF0000",
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+	}{
+		{"valid", UpdateCategoryRequest{Name: "Lunch", Color: "#00FF00"}, http.StatusOK},
+		{"invalid color", UpdateCategoryRequest{Name: "Test", Color: "bad"}, http.StatusBadRequest},
+		{"empty name", UpdateCategoryRequest{Name: "", Color: "#00FF00"}, http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.body)
+			r := reqAsUser("PUT", "/categories/cat-1", body, "user-1")
+			r = withChiURLParam(r, "categoryId", "cat-1")
+			w := httptest.NewRecorder()
+			handleUpdateCategory(w, r)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestHandleUpdateCategory_DuplicateName(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1", UserID: "user-1", Name: "Dinner", Color: "#FF0000",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	mock.categories["cat-2"] = &Category{
+		CategoryID: "cat-2", UserID: "user-1", Name: "Lunch", Color: "#00FF00",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+
+	body, _ := json.Marshal(UpdateCategoryRequest{Name: "Lunch", Color: "#FF0000"})
+	r := reqAsUser("PUT", "/categories/cat-1", body, "user-1")
+	r = withChiURLParam(r, "categoryId", "cat-1")
+	w := httptest.NewRecorder()
+	handleUpdateCategory(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleUpdateCategory_InvalidJSON(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1", UserID: "user-1", Name: "X", Color: "#FF0000",
+	}
+
+	r := reqAsUser("PUT", "/categories/cat-1", []byte("bad"), "user-1")
+	r = withChiURLParam(r, "categoryId", "cat-1")
+	w := httptest.NewRecorder()
+	handleUpdateCategory(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleDeleteCategory_CascadeCleanup(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1", UserID: "user-1", Name: "Dinner", Color: "#FF0000",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	mock.recipes["r1"] = &Recipe{
+		RecipeID:    "r1",
+		UserID:      "user-1",
+		Title:       "Test",
+		Ingredients: []string{"a"},
+		Steps:       []string{"b"},
+		ImageKeys:   []string{},
+		CategoryIDs: []string{"cat-1", "cat-2"},
+	}
+
+	r := reqAsUser("DELETE", "/categories/cat-1", nil, "user-1")
+	r = withChiURLParam(r, "categoryId", "cat-1")
+	w := httptest.NewRecorder()
+	handleDeleteCategory(w, r)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+
+	// Verify cascade: cat-1 removed from recipe
+	recipe := mock.recipes["r1"]
+	if len(recipe.CategoryIDs) != 1 || recipe.CategoryIDs[0] != "cat-2" {
+		t.Errorf("recipe categoryIDs = %v, want [cat-2]", recipe.CategoryIDs)
+	}
+}
+
+func TestHandleBulkAssignCategories_Validation(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	mock.categories["cat-1"] = &Category{
+		CategoryID: "cat-1", UserID: "user-1", Name: "Dinner", Color: "#FF0000",
+	}
+
+	tests := []struct {
+		name       string
+		body       interface{}
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "empty recipeIds",
+			body:       BulkAssignCategoriesRequest{RecipeIDs: []string{}, CategoryIDs: []string{"cat-1"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "recipeIds required",
+		},
+		{
+			name:       "empty categoryIds",
+			body:       BulkAssignCategoriesRequest{RecipeIDs: []string{"r1"}, CategoryIDs: []string{}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "categoryIds required",
+		},
+		{
+			name:       "invalid categoryIds",
+			body:       BulkAssignCategoriesRequest{RecipeIDs: []string{"r1"}, CategoryIDs: []string{"nonexistent"}},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid categoryIds",
+		},
+		{
+			name:       "invalid JSON",
+			body:       nil,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body []byte
+			if tt.body == nil {
+				body = []byte("bad json")
+			} else {
+				body, _ = json.Marshal(tt.body)
+			}
+			r := reqAsUser("POST", "/recipes/bulk-categories", body, "user-1")
+			w := httptest.NewRecorder()
+			handleBulkAssignCategories(w, r)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if tt.wantBody != "" && !containsString(w.Body.String(), tt.wantBody) {
+				t.Errorf("body = %q, want to contain %q", w.Body.String(), tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestHandleGetRecipes_SortOrder(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+
+	now := time.Now()
+	mock.recipes["r1"] = &Recipe{
+		RecipeID: "r1", UserID: "user-1", Title: "Old",
+		Ingredients: []string{"a"}, Steps: []string{"a"},
+		CreatedAt: now.Add(-1 * time.Hour),
+	}
+	mock.recipes["r2"] = &Recipe{
+		RecipeID: "r2", UserID: "user-1", Title: "New",
+		Ingredients: []string{"b"}, Steps: []string{"b"},
+		CreatedAt: now,
+	}
+
+	r := reqAsUser("GET", "/recipes", nil, "user-1")
+	w := httptest.NewRecorder()
+	handleGetRecipes(w, r)
+
+	var recipes []*Recipe
+	json.NewDecoder(w.Body).Decode(&recipes)
+	if len(recipes) != 2 {
+		t.Fatalf("got %d, want 2", len(recipes))
+	}
+	if recipes[0].RecipeID != "r2" {
+		t.Errorf("first recipe = %s, want r2 (newer)", recipes[0].RecipeID)
+	}
+}
+
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && strings.Contains(s, substr)
 }
