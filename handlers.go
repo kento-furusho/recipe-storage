@@ -122,7 +122,7 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get job", http.StatusInternalServerError)
 		return
 	}
-	if job == nil {
+	if job == nil || job.UserID != getUserID(r) {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
 	}
@@ -170,7 +170,7 @@ func handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
 		return
 	}
-	if recipe == nil {
+	if recipe == nil || recipe.UserID != getUserID(r) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
@@ -194,7 +194,7 @@ func handleDeleteRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
 		return
 	}
-	if recipe == nil {
+	if recipe == nil || recipe.UserID != getUserID(r) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
@@ -255,7 +255,7 @@ func handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get recipe", http.StatusInternalServerError)
 		return
 	}
-	if recipe == nil {
+	if recipe == nil || recipe.UserID != getUserID(r) {
 		http.Error(w, "recipe not found", http.StatusNotFound)
 		return
 	}
@@ -298,6 +298,14 @@ func handleGetImageURL(w http.ResponseWriter, r *http.Request) {
 	s3Key := r.URL.Query().Get("key")
 	if s3Key == "" {
 		http.Error(w, "key parameter required", http.StatusBadRequest)
+		return
+	}
+
+	// S3キーが自分のユーザーIDプレフィックスに属するか検証
+	userID := getUserID(r)
+	expectedPrefix := "uploads/" + userID + "/"
+	if !strings.HasPrefix(s3Key, expectedPrefix) {
+		http.Error(w, "access denied", http.StatusForbidden)
 		return
 	}
 
@@ -488,7 +496,7 @@ func handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get category", http.StatusInternalServerError)
 		return
 	}
-	if existingCategory == nil {
+	if existingCategory == nil || existingCategory.UserID != getUserID(r) {
 		http.Error(w, "category not found", http.StatusNotFound)
 		return
 	}
@@ -531,7 +539,7 @@ func handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to get category", http.StatusInternalServerError)
 		return
 	}
-	if category == nil {
+	if category == nil || category.UserID != getUserID(r) {
 		http.Error(w, "category not found", http.StatusNotFound)
 		return
 	}
@@ -631,6 +639,7 @@ func handleBulkAssignCategories(w http.ResponseWriter, r *http.Request) {
 		Failed:     make([]bulkAssignFailed, 0),
 	}
 
+	userID := getUserID(r)
 	for _, recipeID := range recipeIDs {
 		recipe, err := dbStore.GetRecipe(ctx, recipeID)
 		if err != nil {
@@ -640,7 +649,7 @@ func handleBulkAssignCategories(w http.ResponseWriter, r *http.Request) {
 			})
 			continue
 		}
-		if recipe == nil {
+		if recipe == nil || recipe.UserID != userID {
 			response.Failed = append(response.Failed, bulkAssignFailed{
 				RecipeID: recipeID,
 				Reason:   "not found",
