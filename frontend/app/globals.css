@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  --background: #F6F1EB;
   --foreground: #171717;
 }
 
@@ -12,15 +12,27 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* iOS zoom prevention */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* Bottom nav spacing */
+.has-bottom-nav {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  .has-bottom-nav {
+    padding-bottom: 0;
+    padding-left: 200px;
+  }
 }

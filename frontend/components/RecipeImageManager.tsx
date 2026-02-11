@@ -232,11 +232,11 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
                   <button
                     type="button"
                     onClick={() => removeExistingImage(index)}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600"
                     aria-label="画像を削除"
                   >
                     <svg
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -270,11 +270,11 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
                   <button
                     type="button"
                     onClick={() => removeNewImage(index)}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-600"
                     aria-label="画像を削除"
                   >
                     <svg
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -300,7 +300,7 @@ const RecipeImageManager = forwardRef<RecipeImageManagerRef, RecipeImageManagerP
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             className={`
-              border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
+              border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors cursor-pointer
               ${
                 isDragging
                   ? "border-amber-400 bg-amber-50/60"

@@ -1,6 +1,7 @@
 "use client";
 
 import AuthGuard from "@/components/AuthGuard";
+import MobileHeader from "@/components/MobileHeader";
 import {
   createCategory,
   deleteCategory,
@@ -8,8 +9,6 @@ import {
   updateCategory,
   Category,
 } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export default function CategoriesPage() {
@@ -21,11 +20,11 @@ export default function CategoriesPage() {
 }
 
 function CategoriesContent() {
-  const { signOut } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", color: "#22c55e" });
@@ -60,6 +59,7 @@ function CategoriesContent() {
       setError(null);
       await createCategory({ name: form.name, color: form.color });
       setForm({ name: "", color: "#22c55e" });
+      setShowForm(false);
       await loadCategories();
     } catch (err) {
       console.error("Failed to create category:", err);
@@ -112,83 +112,95 @@ function CategoriesContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F1EB] py-8">
-        <div className="container mx-auto px-4">
-          <div className="text-center">読み込み中...</div>
-        </div>
+      <div>
+        <MobileHeader title="カテゴリ" />
+        <div className="px-3 py-8 sm:px-4 text-center text-stone-600">読み込み中...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F1EB] py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <Link href="/recipes" className="text-amber-700 hover:text-amber-900 underline">
-            ← レシピ一覧に戻る
-          </Link>
+    <div>
+      <MobileHeader
+        title="カテゴリ"
+        rightAction={
           <button
             type="button"
-            onClick={() => signOut()}
-            className="px-4 py-2 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 transition-colors text-sm"
+            onClick={() => setShowForm(!showForm)}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-amber-600"
+            aria-label="追加"
           >
-            サインアウト
+            {showForm ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            )}
           </button>
-        </div>
+        }
+      />
 
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h1 className="text-2xl font-bold text-stone-800 mb-4">カテゴリ管理</h1>
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="カテゴリ名"
-              className="flex-1 rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
-            />
-            <input
-              type="color"
-              value={form.color}
-              onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
-              className="h-10 w-16 rounded border border-amber-100"
-            />
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={creating}
-              className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 shadow-sm"
-            >
-              {creating ? "追加中..." : "追加"}
-            </button>
+      <div className="px-3 py-4 sm:px-4 lg:max-w-2xl lg:mx-auto">
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+            {error}
           </div>
-        </div>
+        )}
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-semibold text-stone-800 mb-4">カテゴリ一覧</h2>
-          {categories.length === 0 ? (
-            <p className="text-stone-500">まだカテゴリがありません</p>
-          ) : (
+        {/* Create form (toggle) */}
+        {showForm && (
+          <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
             <div className="space-y-3">
-              {categories.map((category) => (
-                <div
-                  key={category.categoryId}
-                  className="flex flex-col sm:flex-row sm:items-center gap-3 border border-amber-50 rounded-lg p-3"
+              <input
+                type="text"
+                value={form.name}
+                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="カテゴリ名"
+                className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={form.color}
+                  onChange={(event) => setForm((prev) => ({ ...prev, color: event.target.value }))}
+                  className="h-10 w-16 rounded border border-amber-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={creating}
+                  className="flex-1 min-h-[44px] px-4 py-3 rounded-lg bg-amber-500 text-white text-base font-medium hover:bg-amber-600 disabled:opacity-50"
                 >
-                  {editingId === category.categoryId ? (
-                    <>
-                      <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={(event) =>
-                          setEditForm((prev) => ({ ...prev, name: event.target.value }))
-                        }
-                        className="flex-1 rounded-lg border border-amber-100 px-3 py-2 text-stone-900"
-                      />
+                  {creating ? "追加中..." : "追加"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category list */}
+        {categories.length === 0 ? (
+          <p className="text-stone-500 text-center py-8">まだカテゴリがありません</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm divide-y divide-stone-100">
+            {categories.map((category) => (
+              <div key={category.categoryId} className="p-3">
+                {editingId === category.categoryId ? (
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={(event) =>
+                        setEditForm((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900"
+                    />
+                    <div className="flex items-center gap-3">
                       <input
                         type="color"
                         value={editForm.color}
@@ -197,56 +209,59 @@ function CategoriesContent() {
                         }
                         className="h-10 w-16 rounded border border-amber-100"
                       />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdate(category.categoryId)}
-                          disabled={savingId === category.categoryId}
-                          className="px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
-                        >
-                          {savingId === category.categoryId ? "保存中..." : "保存"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          className="px-3 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2 flex-1">
-                        <span
-                          className="inline-block h-3 w-3 rounded-full"
-                          style={{ backgroundColor: category.color }}
-                        />
-                        <span className="text-stone-800">{category.name}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(category)}
-                          className="px-3 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
-                        >
-                          編集
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(category.categoryId)}
-                          className="px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50"
-                        >
-                          削除
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdate(category.categoryId)}
+                        disabled={savingId === category.categoryId}
+                        className="min-h-[44px] px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                      >
+                        {savingId === category.categoryId ? "保存中..." : "保存"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="min-h-[44px] px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="inline-block h-4 w-4 rounded-full shrink-0"
+                      style={{ backgroundColor: category.color }}
+                    />
+                    <span className="text-stone-800 flex-1 truncate">{category.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(category)}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-500 hover:text-stone-700"
+                      aria-label="編集"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(category.categoryId)}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-500 hover:text-red-700"
+                      aria-label="削除"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

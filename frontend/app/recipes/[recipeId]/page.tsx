@@ -1,6 +1,7 @@
 "use client";
 
 import AuthGuard from "@/components/AuthGuard";
+import MobileHeader from "@/components/MobileHeader";
 import {
   deleteRecipe,
   getCategories,
@@ -10,7 +11,6 @@ import {
   Category,
   updateRecipe,
 } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
 import RecipeImageManager, {
   RecipeImageManagerRef,
 } from "@/components/RecipeImageManager";
@@ -27,7 +27,6 @@ export default function RecipeDetailPage() {
 }
 
 function RecipeDetailContent() {
-  const { signOut } = useAuth();
   const params = useParams();
   const recipeId = params.recipeId as string;
   const router = useRouter();
@@ -83,7 +82,6 @@ function RecipeDetailContent() {
         selectedCategoryIds: data.categoryIds || [],
       });
 
-      // 画像のpresigned URLを取得
       const urls: Record<string, string> = {};
       if (data.imageKeys && data.imageKeys.length > 0) {
         for (const imageKey of data.imageKeys) {
@@ -119,13 +117,23 @@ function RecipeDetailContent() {
     setIsEditing(true);
   };
 
+  const handleCancelEdit = () => {
+    if (!recipe) return;
+    setForm({
+      title: recipe.title,
+      sourceUrl: recipe.sourceUrl || "",
+      ingredientsText: (recipe.ingredients || []).join("\n"),
+      stepsText: (recipe.steps || []).join("\n"),
+      selectedCategoryIds: recipe.categoryIds || [],
+    });
+    setEditingImageKeys(recipe.imageKeys || []);
+    setError(null);
+    setIsEditing(false);
+  };
+
   const handleDelete = async () => {
-    if (!recipeId || deleting) {
-      return;
-    }
-    if (!window.confirm("このレシピを削除しますか？")) {
-      return;
-    }
+    if (!recipeId || deleting) return;
+    if (!window.confirm("このレシピを削除しますか？")) return;
 
     try {
       setDeleting(true);
@@ -143,9 +151,7 @@ function RecipeDetailContent() {
   };
 
   const handleSave = async () => {
-    if (!recipeId || saving) {
-      return;
-    }
+    if (!recipeId || saving) return;
     const title = form.title.trim();
     const ingredients = form.ingredientsText
       .split("\n")
@@ -166,7 +172,6 @@ function RecipeDetailContent() {
       setSaving(true);
       setError(null);
 
-      // 新規画像のアップロード
       const finalImageKeys = await imageManagerRef.current?.uploadNewImages();
 
       const updated = await updateRecipe(recipeId, {
@@ -187,7 +192,6 @@ function RecipeDetailContent() {
       });
       setIsEditing(false);
 
-      // 画像URLを再取得
       const urls: Record<string, string> = {};
       for (const key of updated.imageKeys || []) {
         try {
@@ -209,19 +213,19 @@ function RecipeDetailContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F6F1EB] py-8">
-        <div className="container mx-auto px-4">
-          <div className="text-center">読み込み中...</div>
-        </div>
+      <div>
+        <MobileHeader title="レシピ" backHref="/recipes" />
+        <div className="px-3 py-8 sm:px-4 text-center text-stone-600">読み込み中...</div>
       </div>
     );
   }
 
-  if (error || !recipe) {
+  if (error && !recipe) {
     return (
-      <div className="min-h-screen bg-[#F6F1EB] py-8">
-        <div className="container mx-auto px-4">
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
+      <div>
+        <MobileHeader title="レシピ" backHref="/recipes" />
+        <div className="px-3 py-4 sm:px-4">
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm mb-4">
             {error || "レシピが見つかりません"}
           </div>
           <Link
@@ -235,393 +239,318 @@ function RecipeDetailContent() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#F6F1EB] py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <Link
-            href="/recipes"
-            className="text-amber-700 hover:text-amber-900 underline"
-          >
-            ← レシピ一覧に戻る
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/categories"
-              className="text-amber-700 hover:text-amber-900 underline"
-            >
-              カテゴリ管理
-            </Link>
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="px-3 py-1.5 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 transition-colors text-sm"
-            >
-              サインアウト
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            {isEditing ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!recipe) {
-                      return;
-                    }
-                    setForm({
-                      title: recipe.title,
-                      sourceUrl: recipe.sourceUrl || "",
-                      ingredientsText: (recipe.ingredients || []).join("\n"),
-                      stepsText: (recipe.steps || []).join("\n"),
-                      selectedCategoryIds: recipe.categoryIds || [],
-                    });
-                    setEditingImageKeys(recipe.imageKeys || []);
-                    setError(null);
-                    setIsEditing(false);
-                  }}
-                  disabled={saving}
-                  className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? "保存中..." : "保存"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
-                >
-                  編集
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {deleting ? "削除中..." : "削除"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+  if (!recipe) return null;
 
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {/* 画像 */}
-          {recipe.imageKeys && recipe.imageKeys.length > 0 && (
-            <div className="aspect-video bg-amber-50/60">
-              {imageUrls[recipe.imageKeys[0]] ? (
-                <img
-                  src={imageUrls[recipe.imageKeys[0]]}
-                  alt={recipe.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-stone-400">
-                  画像読み込み中...
-                </div>
-              )}
+  return (
+    <div>
+      <MobileHeader
+        title={isEditing ? "編集中" : recipe.title}
+        backHref="/recipes"
+        rightAction={
+          isEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                disabled={saving}
+                className="min-h-[44px] px-3 py-2 text-sm text-stone-600 disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="min-h-[44px] px-3 py-2 text-sm font-semibold text-amber-600 disabled:opacity-50"
+              >
+                {saving ? "保存中..." : "保存"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleEdit}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-600"
+                aria-label="編集"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-500 disabled:opacity-50"
+                aria-label="削除"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                </svg>
+              </button>
+            </>
+          )
+        }
+      />
+
+      {/* Hero image */}
+      {!isEditing && recipe.imageKeys && recipe.imageKeys.length > 0 && (
+        <div className="aspect-[4/3] sm:aspect-video bg-amber-50/60">
+          {imageUrls[recipe.imageKeys[0]] ? (
+            <img
+              src={imageUrls[recipe.imageKeys[0]]}
+              alt={recipe.title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-stone-400">
+              画像読み込み中...
             </div>
           )}
+        </div>
+      )}
 
-          <div className="p-6">
-            {/* タイトル */}
-            {isEditing ? (
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-stone-700 mb-2">
-                  タイトル
-                </label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              </div>
-            ) : (
-              <div className="mb-4">
-                <h1 className="text-3xl font-bold text-stone-800">
-                  {recipe.title}
-                </h1>
-                {recipe.categoryIds && recipe.categoryIds.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {recipe.categoryIds.map((categoryId) => {
-                      const category = categoryMap[categoryId];
-                      if (!category) return null;
-                      return (
-                        <span
-                          key={category.categoryId}
-                          className="px-2 py-1 rounded-full text-xs font-medium"
-                          style={{
-                            backgroundColor: `${category.color}20`,
-                            color: category.color,
-                          }}
-                        >
-                          {category.name}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+      <div className="px-3 py-4 sm:px-4 lg:max-w-2xl lg:mx-auto">
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
 
-            {/* 作成日 */}
-            <p className="text-sm text-stone-500 mb-6">
-              作成日: {new Date(recipe.createdAt).toLocaleString("ja-JP")}
-            </p>
-
-            {/* 画像管理コンポーネント（編集モード時のみ） */}
-            {isEditing && (
-              <div className="mb-6">
-                <RecipeImageManager
-                  ref={imageManagerRef}
-                  currentImageKeys={recipe.imageKeys || []}
-                  currentImageUrls={imageUrls}
-                  recipeId={recipeId}
-                  onImageKeysChange={setEditingImageKeys}
-                />
-              </div>
-            )}
-
-            {/* 参照元URL */}
-            {isEditing ? (
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-stone-700 mb-2">
-                  参照元URL
-                </label>
-                <input
-                  type="url"
-                  value={form.sourceUrl}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      sourceUrl: event.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              </div>
-            ) : (
-              recipe.sourceUrl && (
-              <div className="mb-6">
-                <h2 className="text-sm font-semibold text-stone-700 mb-2">
-                  参照元
-                </h2>
-                <a
-                  href={recipe.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-amber-700 hover:text-amber-900 underline break-all"
-                >
-                  {recipe.sourceUrl}
-                </a>
-              </div>
-              )
-            )}
-
-            {/* カテゴリ */}
-            {isEditing ? (
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-stone-700 mb-2">
-                  カテゴリ
-                </label>
-                {categories.length === 0 ? (
-                  <p className="text-sm text-stone-500">
-                    カテゴリがまだ登録されていません。カテゴリ管理で追加してください。
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {categories.map((category) => (
-                      <label
-                        key={category.categoryId}
-                        className="flex items-center gap-2 rounded border border-amber-50 bg-amber-50/30 px-3 py-2"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.selectedCategoryIds.includes(
-                            category.categoryId
-                          )}
-                          onChange={(event) => {
-                            const checked = event.target.checked;
-                            setForm((prev) => {
-                              const current = new Set(prev.selectedCategoryIds);
-                              if (checked) {
-                                current.add(category.categoryId);
-                              } else {
-                                current.delete(category.categoryId);
-                              }
-                              return {
-                                ...prev,
-                                selectedCategoryIds: Array.from(current),
-                              };
-                            });
-                          }}
-                        />
-                        <span className="inline-flex items-center gap-2 text-sm text-stone-700">
-                          <span
-                            className="inline-block h-3 w-3 rounded-full"
-                            style={{ backgroundColor: category.color }}
-                          />
-                          {category.name}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            {/* 材料 */}
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-stone-800 mb-3">材料</h2>
-              {isEditing ? (
-                <textarea
-                  value={form.ingredientsText}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      ingredientsText: event.target.value,
-                    }))
-                  }
-                  rows={6}
-                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              ) : (
-                <ul className="list-disc list-inside space-y-1">
-                  {recipe.ingredients.map((ingredient, index) => (
-                    <li key={index} className="text-stone-700">
-                      {ingredient}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* 手順 */}
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-stone-800 mb-3">手順</h2>
-              {isEditing ? (
-                <textarea
-                  value={form.stepsText}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      stepsText: event.target.value,
-                    }))
-                  }
-                  rows={8}
-                  className="w-full rounded-lg border border-amber-100 px-3 py-2 text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
-                />
-              ) : (
-                <ol className="list-decimal list-inside space-y-2">
-                  {recipe.steps.map((step, index) => (
-                    <li key={index} className="text-stone-700">
-                      {step}
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-
-            {/* 画像一覧 */}
-            {recipe.imageKeys && recipe.imageKeys.length > 1 && (
-              <div>
-                <h2 className="text-xl font-semibold text-stone-800 mb-3">
-                  画像
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {recipe.imageKeys.slice(1).map((imageKey, index) => (
-                    <div
-                      key={index}
-                      className="aspect-square bg-amber-100/60 rounded overflow-hidden"
+        {/* Title */}
+        {isEditing ? (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-stone-700 mb-2">
+              タイトル
+            </label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, title: event.target.value }))
+              }
+              className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+          </div>
+        ) : (
+          <div className="mb-3">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-stone-800">
+              {recipe.title}
+            </h1>
+            {recipe.categoryIds && recipe.categoryIds.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {recipe.categoryIds.map((categoryId) => {
+                  const category = categoryMap[categoryId];
+                  if (!category) return null;
+                  return (
+                    <span
+                      key={category.categoryId}
+                      className="px-2 py-1 rounded-full text-xs font-medium"
+                      style={{
+                        backgroundColor: `${category.color}20`,
+                        color: category.color,
+                      }}
                     >
-                      {imageUrls[imageKey] ? (
-                        <img
-                          src={imageUrls[imageKey]}
-                          alt={`${recipe.title} ${index + 2}`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-stone-400 text-sm">
-                          読み込み中...
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      {category.name}
+                    </span>
+                  );
+                })}
               </div>
             )}
+          </div>
+        )}
 
-            {/* 下部の編集・削除ボタン */}
-            <div className="mt-6 pt-6 border-t border-amber-50 flex items-center justify-end gap-2">
-              {isEditing ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!recipe) {
-                        return;
-                      }
-                      setForm({
-                        title: recipe.title,
-                        sourceUrl: recipe.sourceUrl || "",
-                        ingredientsText: (recipe.ingredients || []).join("\n"),
-                        stepsText: (recipe.steps || []).join("\n"),
-                        selectedCategoryIds: recipe.categoryIds || [],
-                      });
-                      setEditingImageKeys(recipe.imageKeys || []);
-                      setError(null);
-                      setIsEditing(false);
-                    }}
-                    disabled={saving}
-                    className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60 disabled:opacity-50 disabled:cursor-not-allowed"
+        <p className="text-sm text-stone-500 mb-4">
+          作成日: {new Date(recipe.createdAt).toLocaleString("ja-JP")}
+        </p>
+
+        {/* Image manager (edit mode) */}
+        {isEditing && (
+          <div className="mb-4">
+            <RecipeImageManager
+              ref={imageManagerRef}
+              currentImageKeys={recipe.imageKeys || []}
+              currentImageUrls={imageUrls}
+              recipeId={recipeId}
+              onImageKeysChange={setEditingImageKeys}
+            />
+          </div>
+        )}
+
+        {/* Source URL */}
+        {isEditing ? (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-stone-700 mb-2">
+              参照元URL
+            </label>
+            <input
+              type="url"
+              value={form.sourceUrl}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  sourceUrl: event.target.value,
+                }))
+              }
+              className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+          </div>
+        ) : (
+          recipe.sourceUrl && (
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-stone-700 mb-1">参照元</h2>
+              <a
+                href={recipe.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-700 hover:text-amber-900 underline break-all text-sm"
+              >
+                {recipe.sourceUrl}
+              </a>
+            </div>
+          )
+        )}
+
+        {/* Categories (edit mode) */}
+        {isEditing && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-stone-700 mb-2">
+              カテゴリ
+            </label>
+            {categories.length === 0 ? (
+              <p className="text-sm text-stone-500">
+                カテゴリがまだ登録されていません。
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {categories.map((category) => (
+                  <label
+                    key={category.categoryId}
+                    className="flex items-center gap-2 rounded border border-amber-50 bg-amber-50/30 px-3 py-2 min-h-[44px]"
                   >
-                    キャンセル
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? "保存中..." : "保存"}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleEdit}
-                    className="px-4 py-2 rounded-lg border border-amber-100 text-stone-700 hover:bg-amber-50/60"
-                  >
-                    編集
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {deleting ? "削除中..." : "削除"}
-                  </button>
-                </>
-              )}
+                    <input
+                      type="checkbox"
+                      checked={form.selectedCategoryIds.includes(
+                        category.categoryId
+                      )}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setForm((prev) => {
+                          const current = new Set(prev.selectedCategoryIds);
+                          if (checked) {
+                            current.add(category.categoryId);
+                          } else {
+                            current.delete(category.categoryId);
+                          }
+                          return {
+                            ...prev,
+                            selectedCategoryIds: Array.from(current),
+                          };
+                        });
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-2 text-sm text-stone-700">
+                      <span
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{ backgroundColor: category.color }}
+                      />
+                      {category.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ingredients */}
+        <div className="mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-stone-800 mb-2">材料</h2>
+          {isEditing ? (
+            <textarea
+              value={form.ingredientsText}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  ingredientsText: event.target.value,
+                }))
+              }
+              rows={6}
+              className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+          ) : (
+            <ul className="space-y-1.5">
+              {recipe.ingredients.map((ingredient, index) => (
+                <li key={index} className="flex items-start gap-2 text-stone-700">
+                  <span className="text-amber-400 mt-1.5 text-xs">●</span>
+                  <span>{ingredient}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Steps */}
+        <div className="mb-4">
+          <h2 className="text-lg sm:text-xl font-semibold text-stone-800 mb-2">手順</h2>
+          {isEditing ? (
+            <textarea
+              value={form.stepsText}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  stepsText: event.target.value,
+                }))
+              }
+              rows={8}
+              className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+          ) : (
+            <ol className="space-y-3">
+              {recipe.steps.map((step, index) => (
+                <li key={index} className="flex items-start gap-3 text-stone-700">
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-sm font-semibold shrink-0 mt-0.5">
+                    {index + 1}
+                  </span>
+                  <span className="pt-1">{step}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        {/* Additional images */}
+        {!isEditing && recipe.imageKeys && recipe.imageKeys.length > 1 && (
+          <div>
+            <h2 className="text-lg sm:text-xl font-semibold text-stone-800 mb-2">
+              画像
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {recipe.imageKeys.slice(1).map((imageKey, index) => (
+                <div
+                  key={index}
+                  className="aspect-square bg-amber-100/60 rounded-lg overflow-hidden"
+                >
+                  {imageUrls[imageKey] ? (
+                    <img
+                      src={imageUrls[imageKey]}
+                      alt={`${recipe.title} ${index + 2}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-stone-400 text-sm">
+                      読み込み中...
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

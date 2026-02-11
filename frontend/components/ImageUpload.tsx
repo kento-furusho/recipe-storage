@@ -92,7 +92,6 @@ export default function ImageUpload() {
   }, []);
 
   const handleUpload = useCallback(async () => {
-    // 画像またはURLのどちらかが必要
     if (images.length === 0 && !sourceUrl.trim()) {
       setUploadStatus("画像またはURLを入力してください");
       return;
@@ -104,14 +103,12 @@ export default function ImageUpload() {
     try {
       let s3Keys: string[] = [];
 
-      // 画像がある場合はアップロード
       if (images.length > 0) {
         const jobId = generateJobId();
         const files = images.map((img) => img.file);
         s3Keys = await uploadImages(files, jobId);
       }
 
-      // レシピ生成ジョブを作成
       const urlToSubmit = sourceUrl.trim() || undefined;
       const { jobId: createdJobId } = await createJob(s3Keys, urlToSubmit);
 
@@ -124,7 +121,6 @@ export default function ImageUpload() {
       setImages([]);
       setSourceUrl("");
 
-      // プレビューURLをクリーンアップ
       images.forEach((img) => URL.revokeObjectURL(img.preview));
     } catch (error) {
       console.error("Upload error:", error);
@@ -138,16 +134,9 @@ export default function ImageUpload() {
     }
   }, [images, sourceUrl]);
 
-  // クリーンアップ
-  const cleanup = useCallback(() => {
-    images.forEach((img) => URL.revokeObjectURL(img.preview));
-  }, [images]);
-
   return (
-    <div className="w-full max-w-2xl mx-auto p-6 space-y-6">
-      <h2 className="text-2xl font-bold text-stone-800">レシピを登録</h2>
-
-      {/* URL入力フィールド */}
+    <div className="space-y-4">
+      {/* URL input */}
       <div className="space-y-2">
         <label
           htmlFor="sourceUrl"
@@ -160,21 +149,21 @@ export default function ImageUpload() {
           type="url"
           value={sourceUrl}
           onChange={(e) => setSourceUrl(e.target.value)}
-          placeholder="https://example.com/recipe または https://youtube.com/watch?v=..."
-          className="w-full px-4 py-2 border border-amber-100 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
+          placeholder="https://example.com/recipe"
+          className="w-full px-3 py-3 text-base border border-amber-100 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
         />
         <p className="text-xs text-stone-500">
           レシピサイトのURLやYouTube動画URLを入力できます
         </p>
       </div>
 
-      {/* ドラッグ&ドロップエリア */}
+      {/* Drag & drop area */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         className={`
-          border-2 border-dashed rounded-lg p-8 text-center transition-colors
+          border-2 border-dashed rounded-lg p-4 sm:p-8 text-center transition-colors
           ${
             isDragging
               ? "border-amber-400 bg-amber-50/60"
@@ -203,7 +192,7 @@ export default function ImageUpload() {
         />
         <div className="space-y-2">
           <svg
-            className="mx-auto h-12 w-12 text-stone-400"
+            className="mx-auto h-10 w-10 text-stone-400"
             stroke="currentColor"
             fill="none"
             viewBox="0 0 48 48"
@@ -226,9 +215,9 @@ export default function ImageUpload() {
         </div>
       </div>
 
-      {/* 画像プレビュー */}
+      {/* Image previews */}
       {images.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           {images.map((image, index) => (
             <div key={index} className="relative group">
               <div className="aspect-square rounded-lg overflow-hidden border border-amber-50 bg-amber-50/40">
@@ -240,11 +229,11 @@ export default function ImageUpload() {
               </div>
               <button
                 onClick={() => removeImage(index)}
-                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                 aria-label="画像を削除"
               >
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -262,32 +251,30 @@ export default function ImageUpload() {
         </div>
       )}
 
-      {/* アップロードボタン */}
+      {/* Upload button */}
       {(images.length > 0 || sourceUrl.trim()) && (
-        <div className="flex justify-center">
-          <button
-            onClick={handleUpload}
-            disabled={isUploading}
-            className={`
-              px-6 py-3 rounded-lg font-medium transition-colors
-              ${
-                isUploading
-                  ? "bg-stone-300 cursor-not-allowed"
-                  : "bg-amber-500 hover:bg-amber-600"
-              }
-              text-white
-            `}
-          >
-            {isUploading ? "アップロード中..." : "レシピを登録"}
-          </button>
-        </div>
+        <button
+          onClick={handleUpload}
+          disabled={isUploading}
+          className={`
+            w-full sm:w-auto px-6 py-3 rounded-lg font-medium text-base transition-colors min-h-[44px]
+            ${
+              isUploading
+                ? "bg-stone-300 cursor-not-allowed"
+                : "bg-amber-500 hover:bg-amber-600"
+            }
+            text-white
+          `}
+        >
+          {isUploading ? "アップロード中..." : "レシピを登録"}
+        </button>
       )}
 
-      {/* ステータスメッセージ */}
+      {/* Status message */}
       {uploadStatus && (
         <div
           className={`
-            p-4 rounded-lg text-sm
+            p-3 rounded-lg text-sm
             ${
               uploadStatus.includes("成功") || uploadStatus.includes("追加")
                 ? "bg-green-50 text-green-800"
