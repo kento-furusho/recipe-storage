@@ -300,6 +300,94 @@ func TestParseRecipeResponse_LongTitle(t *testing.T) {
 	}
 }
 
+func TestIsYouTubeURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"youtube.com watch", "https://www.youtube.com/watch?v=abc", true},
+		{"youtube.com shorts", "https://www.youtube.com/shorts/abc", true},
+		{"youtu.be", "https://youtu.be/abc", true},
+		{"m.youtube.com", "https://m.youtube.com/watch?v=abc", true},
+		{"not youtube", "https://example.com/recipe", false},
+		{"empty string", "", false},
+		{"invalid URL", "://bad", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isYouTubeURL(tt.url)
+			if got != tt.want {
+				t.Errorf("isYouTubeURL(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractYouTubeVideoID(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		want    string
+		wantErr bool
+	}{
+		{"watch URL", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ", false},
+		{"short URL", "https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ", false},
+		{"shorts URL", "https://www.youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ", false},
+		{"watch with extra params", "https://www.youtube.com/watch?v=abc123&t=30", "abc123", false},
+		{"youtu.be empty path", "https://youtu.be/", "", true},
+		{"youtube.com no v param", "https://www.youtube.com/watch", "", true},
+		{"youtube.com shorts empty", "https://www.youtube.com/shorts/", "", true},
+		{"not youtube", "https://example.com/video", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := extractYouTubeVideoID(tt.url)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildPromptForYouTube(t *testing.T) {
+	t.Run("all fields", func(t *testing.T) {
+		prompt := buildPromptForYouTube("チキンカレーの作り方", "材料: 鶏肉", "まず鶏肉を切ります", "https://youtu.be/abc")
+		expects := []string{
+			"YouTube料理動画",
+			"チキンカレーの作り方",
+			"材料: 鶏肉",
+			"まず鶏肉を切ります",
+			"https://youtu.be/abc",
+			"JSON形式で返してください",
+		}
+		for _, s := range expects {
+			if !containsStr(prompt, s) {
+				t.Errorf("prompt missing %q", s)
+			}
+		}
+	})
+
+	t.Run("empty description and captions", func(t *testing.T) {
+		prompt := buildPromptForYouTube("タイトル", "", "", "https://youtu.be/abc")
+		if containsStr(prompt, "【説明欄】") {
+			t.Error("should not contain description section when empty")
+		}
+		if containsStr(prompt, "【字幕テキスト】") {
+			t.Error("should not contain captions section when empty")
+		}
+	})
+}
+
 // helpers
 func strPtr(s string) *string { return &s }
 

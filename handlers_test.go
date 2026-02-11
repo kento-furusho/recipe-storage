@@ -1060,3 +1060,136 @@ func TestHandleGetRecipes_SortOrder(t *testing.T) {
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && strings.Contains(s, substr)
 }
+
+func TestHandleCreateJob_Validation(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "invalid JSON",
+			body:       `not json`,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid json",
+		},
+		{
+			name:       "empty imageKeys no URL",
+			body:       `{"imageKeys":[]}`,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "imageKeys or sourceUrl required",
+		},
+		{
+			name:       "empty imageKeys empty URL",
+			body:       `{"imageKeys":[],"sourceUrl":""}`,
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "imageKeys or sourceUrl required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, cleanup := setupTest()
+			defer cleanup()
+
+			r := reqAsUser("POST", "/jobs", []byte(tt.body), "user-1")
+			w := httptest.NewRecorder()
+			handleCreateJob(w, r)
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d, body = %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			if tt.wantBody != "" && !containsString(w.Body.String(), tt.wantBody) {
+				t.Errorf("body = %q, want to contain %q", w.Body.String(), tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestHandleGetJob_EmptyJobId(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	r := reqAsUser("GET", "/jobs/", nil, "user-1")
+	r = withChiURLParam(r, "jobId", "")
+	w := httptest.NewRecorder()
+	handleGetJob(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleGetRecipe_EmptyRecipeId(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	r := reqAsUser("GET", "/recipes/", nil, "user-1")
+	r = withChiURLParam(r, "recipeId", "")
+	w := httptest.NewRecorder()
+	handleGetRecipe(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleDeleteRecipe_EmptyRecipeId(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	r := reqAsUser("DELETE", "/recipes/", nil, "user-1")
+	r = withChiURLParam(r, "recipeId", "")
+	w := httptest.NewRecorder()
+	handleDeleteRecipe(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleDeleteRecipe_NonexistentRecipe(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	r := reqAsUser("DELETE", "/recipes/nonexistent", nil, "user-1")
+	r = withChiURLParam(r, "recipeId", "nonexistent")
+	w := httptest.NewRecorder()
+	handleDeleteRecipe(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleUpdateRecipe_NonexistentRecipe(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	body, _ := json.Marshal(UpdateRecipeRequest{
+		Title: "T", Ingredients: []string{"a"}, Steps: []string{"b"},
+	})
+	r := reqAsUser("PUT", "/recipes/nonexistent", body, "user-1")
+	r = withChiURLParam(r, "recipeId", "nonexistent")
+	w := httptest.NewRecorder()
+	handleUpdateRecipe(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleGetImageURL_EmptyKey(t *testing.T) {
+	r := reqAsUser("GET", "/image-url", nil, "user-1")
+	w := httptest.NewRecorder()
+	handleGetImageURL(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+
+func TestValidateCategoryIDs_EmptyList(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	err := validateCategoryIDs(context.Background(), []string{})
+	if err != nil {
+		t.Errorf("empty list should not error: %v", err)
+	}
+}
