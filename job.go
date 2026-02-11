@@ -36,18 +36,18 @@ func processJob(jobID string) {
 	var recipe *Recipe
 	var recipeErr error
 
-	// 画像がある場合はLLMを使用、YouTube URLの場合はYouTube処理、それ以外はダミー
-	if len(job.ImageKeys) > 0 {
-		recipe, recipeErr = generateRecipeWithLLM(ctx, job)
-		if recipeErr != nil {
-			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, recipeErr)
-			recipe = generateDummyRecipe(job)
-			recipeErr = nil
-		}
-	} else if job.SourceURL != nil && *job.SourceURL != "" && isYouTubeURL(*job.SourceURL) {
+	// YouTube URL優先 → 画像 → ダミー
+	if job.SourceURL != nil && *job.SourceURL != "" && isYouTubeURL(*job.SourceURL) {
 		recipe, recipeErr = generateRecipeFromYouTube(ctx, job)
 		if recipeErr != nil {
 			log.Printf("YouTube recipe generation failed, falling back to dummy: %v", recipeErr)
+			recipe = generateDummyRecipe(job)
+			recipeErr = nil
+		}
+	} else if len(job.ImageKeys) > 0 {
+		recipe, recipeErr = generateRecipeWithLLM(ctx, job)
+		if recipeErr != nil {
+			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, recipeErr)
 			recipe = generateDummyRecipe(job)
 			recipeErr = nil
 		}
