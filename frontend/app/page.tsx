@@ -3,16 +3,30 @@
 import AuthGuard from "@/components/AuthGuard";
 import ImageUpload from "@/components/ImageUpload";
 import MobileHeader from "@/components/MobileHeader";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+
+function extractUrl(text: string): string {
+  const match = text.match(/https?:\/\/[^\s]+/);
+  return match ? match[0] : "";
+}
 
 export default function Home() {
   return (
     <AuthGuard>
-      <HomeContent />
+      <Suspense>
+        <HomeContent />
+      </Suspense>
     </AuthGuard>
   );
 }
 
 function HomeContent() {
+  const searchParams = useSearchParams();
+  const sharedUrl = searchParams.get("shared_url") || "";
+  const sharedText = searchParams.get("shared_text") || "";
+  const initialSourceUrl = sharedUrl || extractUrl(sharedText);
+
   return (
     <div>
       <MobileHeader title="レシピを登録" />
@@ -33,7 +47,7 @@ function HomeContent() {
           </p>
         </div>
 
-        <ImageUpload />
+        <ImageUpload initialSourceUrl={initialSourceUrl} />
 
         {/* Steps */}
         <div className="mt-8 grid grid-cols-3 gap-3 text-center">

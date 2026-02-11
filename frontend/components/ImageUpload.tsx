@@ -8,9 +8,13 @@ interface ImagePreview {
   preview: string;
 }
 
-export default function ImageUpload() {
+interface ImageUploadProps {
+  initialSourceUrl?: string;
+}
+
+export default function ImageUpload({ initialSourceUrl = "" }: ImageUploadProps) {
   const [images, setImages] = useState<ImagePreview[]>([]);
-  const [sourceUrl, setSourceUrl] = useState<string>("");
+  const [sourceUrl, setSourceUrl] = useState<string>(initialSourceUrl);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
