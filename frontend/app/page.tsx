@@ -40,10 +40,10 @@ function HomeContent() {
             AI自動読み取り
           </div>
           <h2 className="text-lg font-bold text-stone-800 mb-1">
-            写真を送るだけでレシピを保存
+            YouTubeやスクリーンショットからレシピを保存
           </h2>
           <p className="text-sm text-stone-500">
-            料理の写真やスクリーンショットからAIがレシピを自動で読み取ります
+            YouTube動画や料理の写真からAIがレシピを自動で読み取ります
           </p>
         </div>
 

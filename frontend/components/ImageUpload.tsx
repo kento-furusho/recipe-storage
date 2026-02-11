@@ -1,7 +1,7 @@
 "use client";
 
 import { createJob, generateJobId, uploadImages } from "@/lib/api";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ImagePreview {
   file: File;
@@ -12,6 +12,15 @@ interface ImageUploadProps {
   initialSourceUrl?: string;
 }
 
+function isYouTubeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.includes("youtube.com") || parsed.hostname.includes("youtu.be");
+  } catch {
+    return false;
+  }
+}
+
 export default function ImageUpload({ initialSourceUrl = "" }: ImageUploadProps) {
   const [images, setImages] = useState<ImagePreview[]>([]);
   const [sourceUrl, setSourceUrl] = useState<string>(initialSourceUrl);
@@ -19,8 +28,36 @@ export default function ImageUpload({ initialSourceUrl = "" }: ImageUploadProps)
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoSubmittedRef = useRef(false);
 
   const MAX_IMAGES = 3;
+
+  // YouTube URLの場合、自動でジョブ作成
+  useEffect(() => {
+    if (!initialSourceUrl || autoSubmittedRef.current || !isYouTubeUrl(initialSourceUrl)) {
+      return;
+    }
+    autoSubmittedRef.current = true;
+
+    const autoSubmit = async () => {
+      setIsUploading(true);
+      setUploadStatus("YouTube動画からレシピを生成中...");
+      try {
+        await createJob([], initialSourceUrl);
+        setUploadStatus("AIがYouTube動画からレシピを生成中です。完了すると「レシピ」一覧に追加されます。");
+        setSourceUrl("");
+      } catch (error) {
+        console.error("Auto-submit error:", error);
+        setUploadStatus(
+          `自動送信に失敗しました。下のフォームから手動で送信してください。`
+        );
+        autoSubmittedRef.current = false;
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    autoSubmit();
+  }, [initialSourceUrl]);
 
   const createPreview = (file: File): string => {
     return URL.createObjectURL(file);

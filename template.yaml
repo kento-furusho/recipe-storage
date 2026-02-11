@@ -164,6 +164,11 @@ Resources:
         - x86_64
       Timeout: 300
       MemorySize: 512
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref S3BucketName
+          JOB_QUEUE_URL: !Ref JobQueue
+          YOUTUBE_API_KEY: !Ref YouTubeAPIKey
       Events:
         JobQueueEvent:
           Type: SQS
@@ -237,6 +242,11 @@ Parameters:
     Type: String
     Description: S3 bucket name for storing recipe images
     Default: your-bucket-name
+  YouTubeAPIKey:
+    Type: String
+    Description: YouTube Data API v3 key
+    Default: ""
+    NoEcho: true
 
 Outputs:
   RecipeAPIUrl:
