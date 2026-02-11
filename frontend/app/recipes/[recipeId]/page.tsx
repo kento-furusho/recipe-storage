@@ -174,13 +174,16 @@ function RecipeDetailContent() {
 
       const finalImageKeys = await imageManagerRef.current?.uploadNewImages();
 
+      const validCategoryIds = form.selectedCategoryIds.filter((id) =>
+        categories.some((c) => c.categoryId === id)
+      );
       const updated = await updateRecipe(recipeId, {
         title,
         ingredients,
         steps,
         sourceUrl: sourceUrl || undefined,
         imageKeys: finalImageKeys,
-        categoryIds: form.selectedCategoryIds,
+        categoryIds: validCategoryIds,
       });
       setRecipe(updated);
       setForm({
