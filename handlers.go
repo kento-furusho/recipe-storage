@@ -36,6 +36,21 @@ type UpdateCategoryRequest struct {
 	Color string `json:"color"`
 }
 
+type BulkAssignCategoriesRequest struct {
+	RecipeIDs   []string `json:"recipeIds"`
+	CategoryIDs []string `json:"categoryIds"`
+}
+
+type bulkAssignFailed struct {
+	RecipeID string `json:"recipeId"`
+	Reason   string `json:"reason"`
+}
+
+type BulkAssignCategoriesResponse struct {
+	UpdatedIDs []string           `json:"updatedIds"`
+	Failed     []bulkAssignFailed `json:"failed"`
+}
+
 const (
 	maxCategoryNameLen = 30
 )
@@ -260,11 +275,7 @@ func handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.CategoryIDs != nil {
-		categoryIDs, err := normalizeCategoryIDs(req.CategoryIDs)
-		if err != nil {
-			http.Error(w, "invalid categoryIds", http.StatusBadRequest)
-			return
-		}
+		categoryIDs := normalizeCategoryIDs(req.CategoryIDs)
 		if err := validateCategoryIDs(ctx, categoryIDs); err != nil {
 			http.Error(w, "invalid categoryIds", http.StatusBadRequest)
 			return
@@ -339,7 +350,7 @@ func handleGetUploadURL(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func normalizeCategoryIDs(values []string) ([]string, error) {
+func normalizeCategoryIDs(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
 	for _, raw := range values {
@@ -353,7 +364,7 @@ func normalizeCategoryIDs(values []string) ([]string, error) {
 		seen[value] = struct{}{}
 		result = append(result, value)
 	}
-	return result, nil
+	return result
 }
 
 func validateCategoryIDs(ctx context.Context, categoryIDs []string) error {
@@ -556,4 +567,98 @@ func removeCategoryID(values []string, target string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func mergeCategoryIDs(existing []string, add []string) []string {
+	seen := make(map[string]struct{}, len(existing)+len(add))
+	result := make([]string, 0, len(existing)+len(add))
+	for _, value := range existing {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	for _, value := range add {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func handleBulkAssignCategories(w http.ResponseWriter, r *http.Request) {
+	var req BulkAssignCategoriesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	recipeIDs := normalizeCategoryIDs(req.RecipeIDs)
+	if len(recipeIDs) == 0 {
+		http.Error(w, "recipeIds required", http.StatusBadRequest)
+		return
+	}
+	if len(recipeIDs) > 50 {
+		http.Error(w, "recipeIds limit exceeded", http.StatusBadRequest)
+		return
+	}
+
+	categoryIDs := normalizeCategoryIDs(req.CategoryIDs)
+	if len(categoryIDs) == 0 {
+		http.Error(w, "categoryIds required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	if err := validateCategoryIDs(ctx, categoryIDs); err != nil {
+		http.Error(w, "invalid categoryIds", http.StatusBadRequest)
+		return
+	}
+
+	response := BulkAssignCategoriesResponse{
+		UpdatedIDs: make([]string, 0, len(recipeIDs)),
+		Failed:     make([]bulkAssignFailed, 0),
+	}
+
+	for _, recipeID := range recipeIDs {
+		recipe, err := dbStore.GetRecipe(ctx, recipeID)
+		if err != nil {
+			response.Failed = append(response.Failed, bulkAssignFailed{
+				RecipeID: recipeID,
+				Reason:   "failed to load",
+			})
+			continue
+		}
+		if recipe == nil {
+			response.Failed = append(response.Failed, bulkAssignFailed{
+				RecipeID: recipeID,
+				Reason:   "not found",
+			})
+			continue
+		}
+
+		recipe.CategoryIDs = mergeCategoryIDs(recipe.CategoryIDs, categoryIDs)
+		if err := dbStore.SaveRecipe(ctx, recipe); err != nil {
+			response.Failed = append(response.Failed, bulkAssignFailed{
+				RecipeID: recipeID,
+				Reason:   "save failed",
+			})
+			continue
+		}
+		response.UpdatedIDs = append(response.UpdatedIDs, recipeID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }

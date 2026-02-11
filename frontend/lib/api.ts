@@ -338,6 +338,29 @@ export async function deleteCategory(categoryId: string): Promise<void> {
   }
 }
 
+export interface BulkAssignCategoriesResponse {
+  updatedIds: string[];
+  failed: { recipeId: string; reason: string }[];
+}
+
+export async function bulkAssignCategories(
+  recipeIds: string[],
+  categoryIds: string[]
+): Promise<BulkAssignCategoriesResponse> {
+  const response = await fetch(`${API_BASE_URL}/recipes/bulk-categories`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ recipeIds, categoryIds }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to bulk assign categories: ${errorText}`);
+  }
+  return response.json();
+}
+
 /**
  * S3画像のpresigned URLを取得する
  */
