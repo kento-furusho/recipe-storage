@@ -148,14 +148,35 @@ export default function ImageUpload({ initialSourceUrl = "" }: ImageUploadProps)
         >
           レシピURL（任意）
         </label>
-        <input
-          id="sourceUrl"
-          type="url"
-          value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
-          placeholder="https://example.com/recipe"
-          className="w-full px-3 py-3 text-base border border-amber-100 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
-        />
+        <div className="relative">
+          <input
+            id="sourceUrl"
+            type="url"
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)}
+            placeholder="https://example.com/recipe"
+            className="w-full px-3 py-3 pr-12 text-base border border-amber-100 rounded-lg focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
+          />
+          {typeof navigator !== "undefined" && navigator.clipboard && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  const url = text.match(/https?:\/\/[^\s]+/)?.[0];
+                  if (url) setSourceUrl(url);
+                } catch {}
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-stone-400 hover:text-amber-600 transition-colors"
+              aria-label="クリップボードから貼り付け"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </button>
+          )}
+        </div>
         <p className="text-xs text-stone-500">
           レシピサイトのURLやYouTube動画URLを入力できます
         </p>
