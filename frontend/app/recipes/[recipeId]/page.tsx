@@ -1,5 +1,6 @@
 "use client";
 
+import AuthGuard from "@/components/AuthGuard";
 import {
   deleteRecipe,
   getCategories,
@@ -9,6 +10,7 @@ import {
   Category,
   updateRecipe,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import RecipeImageManager, {
   RecipeImageManagerRef,
 } from "@/components/RecipeImageManager";
@@ -17,6 +19,15 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export default function RecipeDetailPage() {
+  return (
+    <AuthGuard>
+      <RecipeDetailContent />
+    </AuthGuard>
+  );
+}
+
+function RecipeDetailContent() {
+  const { signOut } = useAuth();
   const params = useParams();
   const recipeId = params.recipeId as string;
   const router = useRouter();
@@ -234,12 +245,21 @@ export default function RecipeDetailPage() {
           >
             ← レシピ一覧に戻る
           </Link>
-          <Link
-            href="/categories"
-            className="text-amber-700 hover:text-amber-900 underline"
-          >
-            カテゴリ管理
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/categories"
+              className="text-amber-700 hover:text-amber-900 underline"
+            >
+              カテゴリ管理
+            </Link>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="px-3 py-1.5 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 transition-colors text-sm"
+            >
+              サインアウト
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             {isEditing ? (
               <>

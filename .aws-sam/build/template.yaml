@@ -46,6 +46,38 @@ Resources:
       KeySchema:
       - AttributeName: categoryId
         KeyType: HASH
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: recipe-user-pool
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: recipe-app-client
+      UserPoolId:
+        Ref: CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_USER_SRP_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+      IdTokenValidity: 1
+      AccessTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        IdToken: hours
+        AccessToken: hours
+        RefreshToken: days
   JobQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -203,6 +235,15 @@ Resources:
         AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
         AllowOrigin: '''*'''
         MaxAge: '''300'''
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn:
+              Fn::GetAtt:
+              - CognitoUserPool
+              - Arn
 Parameters:
   S3BucketName:
     Type: String
@@ -223,3 +264,11 @@ Outputs:
     Description: SQS queue URL for job processing
     Value:
       Ref: JobQueue
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value:
+      Ref: CognitoUserPool
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value:
+      Ref: CognitoUserPoolClient

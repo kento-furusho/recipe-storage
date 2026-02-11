@@ -1,5 +1,6 @@
 "use client";
 
+import AuthGuard from "@/components/AuthGuard";
 import {
   bulkAssignCategories,
   deleteRecipe,
@@ -9,10 +10,20 @@ import {
   Category,
   Recipe,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export default function RecipesPage() {
+  return (
+    <AuthGuard>
+      <RecipesContent />
+    </AuthGuard>
+  );
+}
+
+function RecipesContent() {
+  const { signOut } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,12 +261,21 @@ export default function RecipesPage() {
               </div>
             )}
           </div>
-          <Link
-            href="/"
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm"
-          >
-            新規登録
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm"
+            >
+              新規登録
+            </Link>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="px-4 py-2 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 transition-colors text-sm"
+            >
+              サインアウト
+            </button>
+          </div>
         </div>
         <div className="mb-6">
           <Link

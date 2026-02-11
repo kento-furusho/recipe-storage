@@ -71,7 +71,7 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobID := uuid.New().String()
-	userID := "local"
+	userID := getUserID(r)
 	now := time.Now()
 
 	job := &Job{
@@ -134,7 +134,7 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 // handleGetRecipes はレシピ一覧取得ハンドラー
 func handleGetRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := "local"
+	userID := getUserID(r)
 	recipes, err := dbStore.ListRecipes(ctx, userID)
 	if err != nil {
 		log.Printf("Failed to list recipes from DynamoDB: %v", err)
@@ -329,7 +329,7 @@ func handleGetUploadURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := "local"
+	userID := getUserID(r)
 	key := "uploads/" + userID + "/" + req.JobID + "/" + itoa(req.Index) + ".jpg"
 
 	ctx := r.Context()
@@ -398,7 +398,7 @@ func validateCategoryInput(name string, color string) (string, string, error) {
 // handleGetCategories はカテゴリ一覧取得ハンドラー
 func handleGetCategories(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := "local"
+	userID := getUserID(r)
 
 	categories, err := dbStore.ListCategories(ctx, userID)
 	if err != nil {
@@ -430,7 +430,7 @@ func handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	userID := "local"
+	userID := getUserID(r)
 	existing, err := dbStore.ListCategories(ctx, userID)
 	if err != nil {
 		http.Error(w, "failed to list categories", http.StatusInternalServerError)

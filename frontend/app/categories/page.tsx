@@ -1,5 +1,6 @@
 "use client";
 
+import AuthGuard from "@/components/AuthGuard";
 import {
   createCategory,
   deleteCategory,
@@ -7,10 +8,20 @@ import {
   updateCategory,
   Category,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export default function CategoriesPage() {
+  return (
+    <AuthGuard>
+      <CategoriesContent />
+    </AuthGuard>
+  );
+}
+
+function CategoriesContent() {
+  const { signOut } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +127,13 @@ export default function CategoriesPage() {
           <Link href="/recipes" className="text-amber-700 hover:text-amber-900 underline">
             ← レシピ一覧に戻る
           </Link>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="px-4 py-2 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-100 transition-colors text-sm"
+          >
+            サインアウト
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">

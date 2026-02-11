@@ -1,4 +1,26 @@
+import { fetchAuthSession } from "aws-amplify/auth";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+/**
+ * 認証付きfetch: IDトークンをAuthorizationヘッダーに付与する
+ */
+async function authFetch(
+  input: string,
+  init?: RequestInit
+): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  } catch {
+    // トークン取得失敗時はヘッダーなしで送信（ローカル開発用）
+  }
+  return fetch(input, { ...init, headers });
+}
 
 export interface UploadURLRequest {
   jobId: string;
@@ -19,7 +41,7 @@ export async function getUploadURL(
   index: number,
   contentType: string
 ): Promise<UploadURLResponse> {
-  const response = await fetch(`${API_BASE_URL}/upload-url`, {
+  const response = await authFetch(`${API_BASE_URL}/upload-url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -159,7 +181,7 @@ export async function createJob(
     body.sourceUrl = sourceUrl;
   }
 
-  const response = await fetch(`${API_BASE_URL}/jobs`, {
+  const response = await authFetch(`${API_BASE_URL}/jobs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -179,7 +201,7 @@ export async function createJob(
  * ジョブの状態を取得する
  */
 export async function getJob(jobId: string): Promise<Job> {
-  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`);
+  const response = await authFetch(`${API_BASE_URL}/jobs/${jobId}`);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -223,7 +245,7 @@ export interface Category {
  * レシピ一覧を取得する
  */
 export async function getRecipes(): Promise<Recipe[]> {
-  const response = await fetch(`${API_BASE_URL}/recipes`);
+  const response = await authFetch(`${API_BASE_URL}/recipes`);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -237,7 +259,7 @@ export async function getRecipes(): Promise<Recipe[]> {
  * レシピ詳細を取得する
  */
 export async function getRecipe(recipeId: string): Promise<Recipe> {
-  const response = await fetch(`${API_BASE_URL}/recipes/${recipeId}`);
+  const response = await authFetch(`${API_BASE_URL}/recipes/${recipeId}`);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -251,7 +273,7 @@ export async function getRecipe(recipeId: string): Promise<Recipe> {
  * レシピを削除する
  */
 export async function deleteRecipe(recipeId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/recipes/${recipeId}`, {
+  const response = await authFetch(`${API_BASE_URL}/recipes/${recipeId}`, {
     method: "DELETE",
   });
 
@@ -268,7 +290,7 @@ export async function updateRecipe(
   recipeId: string,
   body: UpdateRecipeRequest
 ): Promise<Recipe> {
-  const response = await fetch(`${API_BASE_URL}/recipes/${recipeId}`, {
+  const response = await authFetch(`${API_BASE_URL}/recipes/${recipeId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -285,7 +307,7 @@ export async function updateRecipe(
 }
 
 export async function getCategories(): Promise<Category[]> {
-  const response = await fetch(`${API_BASE_URL}/categories`);
+  const response = await authFetch(`${API_BASE_URL}/categories`);
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to get categories: ${errorText}`);
@@ -296,7 +318,7 @@ export async function getCategories(): Promise<Category[]> {
 export async function createCategory(
   body: Pick<Category, "name" | "color">
 ): Promise<Category> {
-  const response = await fetch(`${API_BASE_URL}/categories`, {
+  const response = await authFetch(`${API_BASE_URL}/categories`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -314,13 +336,16 @@ export async function updateCategory(
   categoryId: string,
   body: Pick<Category, "name" | "color">
 ): Promise<Category> {
-  const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/categories/${categoryId}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to update category: ${errorText}`);
@@ -329,9 +354,12 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(categoryId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
-    method: "DELETE",
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/categories/${categoryId}`,
+    {
+      method: "DELETE",
+    }
+  );
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to delete category: ${errorText}`);
@@ -347,13 +375,16 @@ export async function bulkAssignCategories(
   recipeIds: string[],
   categoryIds: string[]
 ): Promise<BulkAssignCategoriesResponse> {
-  const response = await fetch(`${API_BASE_URL}/recipes/bulk-categories`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ recipeIds, categoryIds }),
-  });
+  const response = await authFetch(
+    `${API_BASE_URL}/recipes/bulk-categories`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ recipeIds, categoryIds }),
+    }
+  );
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to bulk assign categories: ${errorText}`);
@@ -366,7 +397,9 @@ export async function bulkAssignCategories(
  */
 export async function getImageUrl(s3Key: string): Promise<string> {
   const encodedKey = encodeURIComponent(s3Key);
-  const response = await fetch(`${API_BASE_URL}/image-url?key=${encodedKey}`);
+  const response = await authFetch(
+    `${API_BASE_URL}/image-url?key=${encodedKey}`
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
