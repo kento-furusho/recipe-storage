@@ -13,6 +13,9 @@ import {
   signUp as amplifySignUp,
   confirmSignUp as amplifyConfirmSignUp,
   signOut as amplifySignOut,
+  updatePassword as amplifyUpdatePassword,
+  updateUserAttribute as amplifyUpdateUserAttribute,
+  confirmUserAttribute as amplifyConfirmUserAttribute,
   fetchAuthSession,
   getCurrentUser,
 } from "aws-amplify/auth";
@@ -26,6 +29,9 @@ interface AuthContextType {
   confirmSignUp: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
+  updatePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  updateEmail: (newEmail: string) => Promise<void>;
+  confirmEmailUpdate: (code: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,9 +94,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updatePassword = useCallback(async (oldPassword: string, newPassword: string) => {
+    await amplifyUpdatePassword({ oldPassword, newPassword });
+  }, []);
+
+  const updateEmail = useCallback(async (newEmail: string) => {
+    await amplifyUpdateUserAttribute({
+      userAttribute: { attributeKey: "email", value: newEmail },
+    });
+  }, []);
+
+  const confirmEmailUpdate = useCallback(async (code: string) => {
+    await amplifyConfirmUserAttribute({
+      userAttributeKey: "email",
+      confirmationCode: code,
+    });
+    await checkUser();
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, signIn, signUp, confirmSignUp, signOut, getAccessToken }}
+      value={{ user, loading, signIn, signUp, confirmSignUp, signOut, getAccessToken, updatePassword, updateEmail, confirmEmailUpdate }}
     >
       {children}
     </AuthContext.Provider>
