@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkUser();
   }, []);
 
-  const checkUser = async () => {
+  const checkUser = useCallback(async () => {
     try {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
@@ -59,14 +59,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const result = await amplifySignIn({ username: email, password });
     if (result.isSignedIn) {
       await checkUser();
     }
-  }, []);
+  }, [checkUser]);
 
   const signUp = useCallback(async (email: string, password: string) => {
     await amplifySignUp({
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       confirmationCode: code,
     });
     await checkUser();
-  }, []);
+  }, [checkUser]);
 
   return (
     <AuthContext.Provider

@@ -34,6 +34,11 @@ function SettingsContent() {
     e.preventDefault();
     setPasswordMessage(null);
 
+    if (newPassword.length < 8) {
+      setPasswordMessage({ type: "error", text: "パスワードは8文字以上にしてください" });
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setPasswordMessage({ type: "error", text: "新しいパスワードが一致しません" });
       return;
@@ -56,9 +61,15 @@ function SettingsContent() {
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmailMessage(null);
+
+    if (newEmail.trim() === user?.email) {
+      setEmailMessage({ type: "error", text: "現在のメールアドレスと同じです" });
+      return;
+    }
+
     setEmailLoading(true);
     try {
-      await updateEmail(newEmail);
+      await updateEmail(newEmail.trim());
       setEmailStep("confirm");
       setEmailMessage({ type: "success", text: "確認コードを新しいメールアドレスに送信しました" });
     } catch (err) {
