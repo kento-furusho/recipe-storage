@@ -173,8 +173,10 @@ test.describe("Settings Page", () => {
       // Password change section
       await expect(page.getByText("パスワード変更")).toBeVisible();
 
-      // Sign out section
-      await expect(page.getByText("サインアウト")).toBeVisible();
+      // Sign out section (may need scroll on smaller viewports)
+      const signOutHeading = page.getByText("サインアウト").first();
+      await signOutHeading.scrollIntoViewIfNeeded();
+      await expect(signOutHeading).toBeVisible();
     });
 
     test("shows user email in account info", async ({ page }) => {
