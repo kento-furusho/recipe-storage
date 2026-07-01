@@ -152,6 +152,7 @@ export function generateJobId(): string {
 export interface CreateJobRequest {
   imageKeys: string[];
   sourceUrl?: string;
+  targetRecipeId?: string;
 }
 
 export interface CreateJobResponse {
@@ -174,13 +175,17 @@ export interface Job {
  */
 export async function createJob(
   imageKeys: string[] = [],
-  sourceUrl?: string
+  sourceUrl?: string,
+  targetRecipeId?: string
 ): Promise<CreateJobResponse> {
   const body: CreateJobRequest = {
     imageKeys,
   };
   if (sourceUrl) {
     body.sourceUrl = sourceUrl;
+  }
+  if (targetRecipeId) {
+    body.targetRecipeId = targetRecipeId;
   }
 
   const response = await authFetch(`${API_BASE_URL}/jobs`, {

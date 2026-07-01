@@ -44,13 +44,17 @@ type Job struct {
 	ImageKeys []string  `json:"imageKeys" dynamodbav:"imageKeys"`
 	SourceURL *string   `json:"sourceUrl" dynamodbav:"sourceUrl,omitempty"`
 	RecipeID  *string   `json:"recipeId" dynamodbav:"recipeId,omitempty"`
-	CreatedAt time.Time `json:"createdAt" dynamodbav:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
+	// TargetRecipeID が設定されている場合、新規作成せず既存レシピを上書き再生成する
+	TargetRecipeID *string   `json:"targetRecipeId,omitempty" dynamodbav:"targetRecipeId,omitempty"`
+	CreatedAt      time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt" dynamodbav:"updatedAt"`
 }
 
 type CreateJobRequest struct {
 	ImageKeys []string `json:"imageKeys"`
 	SourceURL *string  `json:"sourceUrl,omitempty"`
+	// 既存レシピの再作成（上書き）時に対象レシピIDを指定する
+	TargetRecipeID *string `json:"targetRecipeId,omitempty"`
 }
 
 type CreateJobResponse struct {

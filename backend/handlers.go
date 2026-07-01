@@ -73,20 +73,35 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	jobID := uuid.New().String()
 	userID := getUserID(r)
 	now := time.Now()
+	ctx := r.Context()
+
+	// 再作成（上書き）の場合は対象レシピの存在と所有者を検証する
+	if req.TargetRecipeID != nil && *req.TargetRecipeID != "" {
+		existing, err := dbStore.GetRecipe(ctx, *req.TargetRecipeID)
+		if err != nil {
+			log.Printf("Failed to get target recipe: %v", err)
+			http.Error(w, "failed to load target recipe", http.StatusInternalServerError)
+			return
+		}
+		if existing == nil || existing.UserID != userID {
+			http.Error(w, "target recipe not found", http.StatusNotFound)
+			return
+		}
+	}
 
 	job := &Job{
-		JobID:     jobID,
-		UserID:    userID,
-		Status:    JobStatusPending,
-		ImageKeys: req.ImageKeys,
-		SourceURL: req.SourceURL,
-		RecipeID:  nil,
-		CreatedAt: now,
-		UpdatedAt: now,
+		JobID:          jobID,
+		UserID:         userID,
+		Status:         JobStatusPending,
+		ImageKeys:      req.ImageKeys,
+		SourceURL:      req.SourceURL,
+		RecipeID:       nil,
+		TargetRecipeID: req.TargetRecipeID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	// DynamoDBに保存
-	ctx := r.Context()
 	if err := dbStore.SaveJob(ctx, job); err != nil {
 		log.Printf("Failed to save job to DynamoDB: %v", err)
 		http.Error(w, "failed to save job", http.StatusInternalServerError)

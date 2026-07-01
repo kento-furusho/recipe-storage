@@ -55,6 +55,17 @@ func processJob(jobID string) {
 		recipe = generateDummyRecipe(job)
 	}
 
+	// 再作成（上書き）の場合は既存レシピのIDを引き継ぎ、カテゴリと作成日を保持する
+	if job.TargetRecipeID != nil && *job.TargetRecipeID != "" {
+		if existing, err := dbStore.GetRecipe(ctx, *job.TargetRecipeID); err != nil {
+			log.Printf("Failed to load target recipe %s for re-creation: %v", *job.TargetRecipeID, err)
+		} else if existing != nil {
+			recipe.RecipeID = existing.RecipeID
+			recipe.CreatedAt = existing.CreatedAt
+			recipe.CategoryIDs = existing.CategoryIDs
+		}
+	}
+
 	// ジョブとレシピをDynamoDBに保存
 	if recipeErr == nil {
 		job.Status = JobStatusSucceeded

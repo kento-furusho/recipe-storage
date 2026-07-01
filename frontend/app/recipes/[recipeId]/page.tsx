@@ -3,9 +3,11 @@
 import AuthGuard from "@/components/AuthGuard";
 import MobileHeader from "@/components/MobileHeader";
 import {
+  createJob,
   deleteRecipe,
   getCategories,
   getImageUrl,
+  getJob,
   getRecipe,
   Recipe,
   Category,
@@ -36,6 +38,7 @@ function RecipeDetailContent() {
   const [error, setError] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState(false);
+  const [recreating, setRecreating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingImageKeys, setEditingImageKeys] = useState<string[]>([]);
@@ -147,6 +150,62 @@ function RecipeDetailContent() {
       );
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleRecreate = async () => {
+    if (!recipe || recreating) return;
+    const hasSource =
+      (recipe.imageKeys && recipe.imageKeys.length > 0) ||
+      !!(recipe.sourceUrl && recipe.sourceUrl.trim());
+    if (!hasSource) return;
+    if (
+      !window.confirm(
+        "再作成すると現在のタイトル・材料・手順は上書きされます。よろしいですか？"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setRecreating(true);
+      setError(null);
+
+      const { jobId } = await createJob(
+        recipe.imageKeys || [],
+        recipe.sourceUrl || undefined,
+        recipe.recipeId
+      );
+
+      // ジョブ完了をポーリング（最大60秒）
+      const deadline = Date.now() + 60_000;
+      let finalStatus = "";
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const job = await getJob(jobId);
+        if (job.status === "SUCCEEDED" || job.status === "FAILED") {
+          finalStatus = job.status;
+          break;
+        }
+      }
+
+      if (finalStatus === "FAILED") {
+        setError("再作成に失敗しました。しばらくして再度お試しください。");
+      } else if (finalStatus !== "SUCCEEDED") {
+        setError(
+          "再作成に時間がかかっています。しばらくしてから画面を更新してください。"
+        );
+      }
+
+      // 成功・タイムアウトいずれもレシピを再読み込みして最新状態を反映
+      await loadRecipe();
+    } catch (err) {
+      console.error("Failed to recreate recipe:", err);
+      setError(
+        err instanceof Error ? err.message : "レシピの再作成に失敗しました"
+      );
+    } finally {
+      setRecreating(false);
     }
   };
 
@@ -271,6 +330,29 @@ function RecipeDetailContent() {
             </>
           ) : (
             <>
+              {((recipe.imageKeys && recipe.imageKeys.length > 0) ||
+                !!(recipe.sourceUrl && recipe.sourceUrl.trim())) && (
+                <button
+                  type="button"
+                  onClick={handleRecreate}
+                  disabled={recreating}
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-600 disabled:opacity-50"
+                  aria-label="再作成"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className={`h-5 w-5 ${recreating ? "animate-spin" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M23 4v6h-6" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleEdit}
@@ -321,6 +403,16 @@ function RecipeDetailContent() {
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
             {error}
+          </div>
+        )}
+
+        {recreating && (
+          <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+            AIがレシピを再作成中です…
           </div>
         )}
 
