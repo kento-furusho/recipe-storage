@@ -167,8 +167,8 @@ func buildPrompt(imageCount int, sourceURL *string) string {
 
 // callBedrockAPI はBedrock APIを呼び出してレシピを生成する
 func callBedrockAPI(ctx context.Context, prompt string, imageDataList []*ImageData) (string, error) {
-	// Claude 3 HaikuのモデルID
-	modelID := "anthropic.claude-3-haiku-20240307-v1:0"
+	// Claude Haiku 4.5の推論プロファイルID（日本リージョン）
+	modelID := "jp.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 	// メッセージコンテンツを構築
 	content := []map[string]interface{}{
