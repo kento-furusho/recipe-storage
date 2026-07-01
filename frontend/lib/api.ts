@@ -1,4 +1,5 @@
 import { fetchAuthSession } from "aws-amplify/auth";
+import { compressImage } from "./image-compression";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -117,7 +118,8 @@ export async function uploadImages(
   const s3Keys: string[] = [];
 
   for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+    // アップロード前にブラウザ側で圧縮（縮小＋JPEG化）して保存サイズを削減
+    const file = await compressImage(files[i]);
 
     try {
       // presigned URLを取得
