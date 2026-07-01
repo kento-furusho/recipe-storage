@@ -5,9 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run Commands
 
 ### Backend (Go)
+Goのソース一式は `backend/` に配置（`sam build` がリポジトリ全体＝`frontend/`をコピーして遅くなるのを避けるため。`template.yaml` の `CodeUri: backend`）。ローカル開発は `backend/` で実行し、`.env` も `backend/.env` に置く。
 ```bash
-go run .                    # ローカル開発サーバー (port 8080)
-sam build                   # Lambda用ビルド (API + Worker)
+cd backend && go run .      # ローカル開発サーバー (port 8080)
+sam build                   # Lambda用ビルド (API + Worker) — リポジトリルートで実行
 sam deploy                  # AWSへデプロイ
 sam build && sam deploy     # ビルド & デプロイ
 ```
@@ -21,7 +22,7 @@ cd frontend && npm run build    # プロダクションビルド
 ## Architecture
 
 ### Overview
-レシピ画像をAI（Bedrock Claude 3 Haiku）で解析し、レシピデータとして保存するサーバーレスアプリケーション。
+レシピ画像をAI（Bedrock Claude Haiku 4.5）で解析し、レシピデータとして保存するサーバーレスアプリケーション。
 
 ### Backend: 2つのLambda関数
 - **RecipeAPIFunction** - API Gateway経由のHTTPリクエスト処理（chi router）

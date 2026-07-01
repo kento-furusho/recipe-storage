@@ -92,7 +92,7 @@ Resources:
     Metadata:
       BuildMethod: makefile
     Properties:
-      CodeUri: .
+      CodeUri: backend
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
@@ -157,7 +157,7 @@ Resources:
     Metadata:
       BuildMethod: makefile
     Properties:
-      CodeUri: .
+      CodeUri: backend
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:

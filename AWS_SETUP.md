@@ -221,8 +221,8 @@ aws bedrock list-foundation-models --region ap-northeast-1
 1. `.env`ファイルに認証情報を設定（方法 2 を使用する場合）
 2. バックエンドを起動：
    ```bash
-   cd /Users/kento/Documents/programing/recipe-api
-   go run main.go
+   cd /Users/kento/Documents/programing/recipe-api/backend
+   go run .
    ```
 3. フロントエンドから画像をアップロード
 4. ログで Bedrock API 呼び出しを確認
