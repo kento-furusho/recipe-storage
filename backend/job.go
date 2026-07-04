@@ -36,8 +36,9 @@ func processJob(jobID string) {
 	var recipe *Recipe
 	var recipeErr error
 
-	// YouTube URL優先 → 画像 → ダミー
-	if job.SourceURL != nil && *job.SourceURL != "" && isYouTubeURL(*job.SourceURL) {
+	// YouTube URL優先 → 画像 → 一般URL → ダミー
+	hasSourceURL := job.SourceURL != nil && *job.SourceURL != ""
+	if hasSourceURL && isYouTubeURL(*job.SourceURL) {
 		recipe, recipeErr = generateRecipeFromYouTube(ctx, job)
 		if recipeErr != nil {
 			log.Printf("YouTube recipe generation failed, falling back to dummy: %v", recipeErr)
@@ -48,6 +49,13 @@ func processJob(jobID string) {
 		recipe, recipeErr = generateRecipeWithLLM(ctx, job)
 		if recipeErr != nil {
 			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, recipeErr)
+			recipe = generateDummyRecipe(job)
+			recipeErr = nil
+		}
+	} else if hasSourceURL {
+		recipe, recipeErr = generateRecipeFromWebPage(ctx, job)
+		if recipeErr != nil {
+			log.Printf("Web page recipe generation failed for job %s, falling back to dummy: %v", jobID, recipeErr)
 			recipe = generateDummyRecipe(job)
 			recipeErr = nil
 		}
