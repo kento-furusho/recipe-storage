@@ -154,10 +154,10 @@ func buildPrompt(imageCount int, sourceURL *string) string {
 	prompt.WriteString("}\n\n")
 
 	prompt.WriteString("【注意事項】\n")
-	prompt.WriteString("- 画像にレシピ情報が含まれていない場合は、可能な限り推測してください\n")
-	prompt.WriteString("- 材料は分量を含めて記載してください（例: \"鶏もも肉 200g\"）\n")
-	prompt.WriteString("- 手順は具体的で実行可能な内容にしてください\n")
-	prompt.WriteString("- 不明な点は推測せず、空欄にするか「要確認」と記載してください\n")
+	prompt.WriteString("- 画像に実際に写っている・読み取れる情報だけを抽出してください。画像から読み取れない内容を推測・想像で補完しないでください\n")
+	prompt.WriteString("- 手順（作り方）が画像に写っていない場合は、手順を創作せず \"steps\" を空配列 [] にしてください。手順なしのままで構いません\n")
+	prompt.WriteString("- 材料も画像に記載がある場合のみ、分量を含めて記載してください（例: \"鶏もも肉 200g\"）。読み取れない材料を創作しないでください\n")
+	prompt.WriteString("- タイトルは画像から料理名が判断できない場合のみ、写っている料理の見た目から簡潔に付けて構いません\n")
 	prompt.WriteString("- 必ず有効なJSON形式で返してください\n")
 	prompt.WriteString("- 返答はJSONのみ。前後の説明文、Markdown、コードブロックは出力しないでください\n")
 	prompt.WriteString("- JSONの先頭は「{」で始め、末尾は「}」で終えてください\n")
@@ -274,8 +274,9 @@ func parseRecipeResponse(responseText string, job *Job) (*Recipe, error) {
 		llmResponse.Ingredients = llmResponse.Ingredients[:50]
 	}
 
-	if len(llmResponse.Steps) == 0 {
-		llmResponse.Steps = []string{"要確認"}
+	// 手順が画像から読み取れない場合は空のままにする（創作した手順で埋めない）
+	if llmResponse.Steps == nil {
+		llmResponse.Steps = []string{}
 	}
 	if len(llmResponse.Steps) > 30 {
 		llmResponse.Steps = llmResponse.Steps[:30]

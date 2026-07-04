@@ -604,7 +604,7 @@ function RecipeDetailContent() {
               rows={8}
               className="w-full rounded-lg border border-amber-100 px-3 py-3 text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-200"
             />
-          ) : (
+          ) : recipe.steps && recipe.steps.length > 0 ? (
             <ol className="space-y-3">
               {recipe.steps.map((step, index) => (
                 <li key={index} className="flex items-start gap-3 text-stone-700">
@@ -615,6 +615,10 @@ function RecipeDetailContent() {
                 </li>
               ))}
             </ol>
+          ) : (
+            <p className="text-sm text-stone-400">
+              手順は登録されていません（画像から読み取れませんでした）
+            </p>
           )}
         </div>
 
