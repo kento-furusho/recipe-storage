@@ -192,11 +192,11 @@ func TestParseRecipeResponse(t *testing.T) {
 			wantTitle: "レシピ",
 		},
 		{
-			name:            "empty ingredients and steps get defaults",
+			name:            "empty ingredients get defaults, empty steps stay empty",
 			response:        `{"title":"Test","ingredients":[],"steps":[]}`,
 			job:             job,
 			wantIngredients: 1,
-			wantSteps:       1,
+			wantSteps:       0,
 		},
 		{
 			name:    "invalid JSON",
