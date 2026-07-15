@@ -1,5 +1,266 @@
-template-file-path: template.yaml
-parameters:
-  S3BucketName: recipe-uploads-dev-kento-1766215077
-  YouTubeAPIKey: '****'
-tags: {}
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Recipe API - Lambda function with API Gateway
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 512
+    Runtime: provided.al2023
+    Environment:
+      Variables:
+        S3_BUCKET: !Ref S3BucketName
+        JOB_QUEUE_URL: !Ref JobQueue
+
+Resources:
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+
+  RecipesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-recipes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: recipeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: recipeId
+          KeyType: HASH
+
+  CategoriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-categories
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: categoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: categoryId
+          KeyType: HASH
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: recipe-user-pool
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: recipe-app-client
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      IdTokenValidity: 1
+      AccessTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        IdToken: hours
+        AccessToken: hours
+        RefreshToken: days
+
+  JobQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 300
+
+  RecipeAPIFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: backend
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref S3BucketName
+          ALLOWED_ORIGIN: "https://recipe-storage-5mwwwb0y6-kentofurushos-projects.vercel.app"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref RecipeAPI
+        RootEvent:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref RecipeAPI
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub "arn:aws:s3:::${S3BucketName}"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !GetAtt JobsTable.Arn
+                - !GetAtt RecipesTable.Arn
+                - !GetAtt CategoriesTable.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt JobQueue.Arn
+
+  RecipeWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: backend
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref S3BucketName
+          JOB_QUEUE_URL: !Ref JobQueue
+          YOUTUBE_API_KEY: !Ref YouTubeAPIKey
+      Events:
+        JobQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt JobQueue.Arn
+            BatchSize: 1
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub "arn:aws:s3:::${S3BucketName}"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !GetAtt JobsTable.Arn
+                - !GetAtt RecipesTable.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ChangeMessageVisibility
+              Resource: !GetAtt JobQueue.Arn
+
+  RecipeAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+        MaxAge: "'300'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+              Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket name for storing recipe images
+    Default: your-bucket-name
+  YouTubeAPIKey:
+    Type: String
+    Description: YouTube Data API v3 key
+    Default: ""
+    NoEcho: true
+
+Outputs:
+  RecipeAPIUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${RecipeAPI}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  RecipeAPIFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt RecipeAPIFunction.Arn
+  JobQueueUrl:
+    Description: SQS queue URL for job processing
+    Value: !Ref JobQueue
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref CognitoUserPoolClient
