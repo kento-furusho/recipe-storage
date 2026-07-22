@@ -1,5 +1,5 @@
 template-file-path: template.yaml
 parameters:
   S3BucketName: recipe-uploads-dev-kento-1766215077
-  YouTubeAPIKey: 'YouTube APIキーの実際の値'
+  YouTubeAPIKey: '{{resolve:ssm-secure:/recipe-api/youtube-api-key}}'
 tags: {}
