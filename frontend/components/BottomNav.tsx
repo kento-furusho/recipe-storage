@@ -25,6 +25,18 @@ const tabs = [
     ),
   },
   {
+    label: "食材で探す",
+    href: "/pantry",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <line x1="5" y1="10" x2="19" y2="10" />
+        <line x1="8" y1="5" x2="8" y2="7" />
+        <line x1="8" y1="13" x2="8" y2="16" />
+      </svg>
+    ),
+  },
+  {
     label: "カテゴリ",
     href: "/categories",
     icon: (

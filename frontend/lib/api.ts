@@ -429,3 +429,60 @@ export async function getImageUrl(s3Key: string): Promise<string> {
   const data = await response.json();
   return data.url;
 }
+
+export interface IngredientItem {
+  name: string;
+  aliases: string[];
+  category: string;
+  usageCount: number;
+}
+
+export interface IngredientSearchResult {
+  recipe: Recipe;
+  missing: string[];
+  matched: string[];
+}
+
+export interface IngredientSearchResponse {
+  results: IngredientSearchResult[];
+  unknownInputs: string[];
+  unprocessedCount: number;
+}
+
+/**
+ * 食材マスタ（調味料を除く）を、自分のレシピでよく使う順に取得する
+ */
+export async function getIngredients(): Promise<IngredientItem[]> {
+  const response = await authFetch(`${API_BASE_URL}/ingredients`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get ingredients: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.ingredients;
+}
+
+/**
+ * 手持ちの食材で作れる（あと1〜2品で作れる）レシピを探す
+ */
+export async function searchRecipesByIngredients(
+  ingredients: string[]
+): Promise<IngredientSearchResponse> {
+  const response = await authFetch(
+    `${API_BASE_URL}/recipes/search-by-ingredients`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ingredients }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to search recipes: ${errorText}`);
+  }
+
+  return response.json();
+}

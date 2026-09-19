@@ -19,17 +19,35 @@ import (
 
 // mockStore implements Store for testing.
 type mockStore struct {
-	jobs       map[string]*Job
-	recipes    map[string]*Recipe
-	categories map[string]*Category
+	jobs        map[string]*Job
+	recipes     map[string]*Recipe
+	categories  map[string]*Category
+	ingredients map[string]*Ingredient
 }
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		jobs:       make(map[string]*Job),
-		recipes:    make(map[string]*Recipe),
-		categories: make(map[string]*Category),
+		jobs:        make(map[string]*Job),
+		recipes:     make(map[string]*Recipe),
+		categories:  make(map[string]*Category),
+		ingredients: make(map[string]*Ingredient),
 	}
+}
+
+func (m *mockStore) ListIngredients(_ context.Context) ([]*Ingredient, error) {
+	list := make([]*Ingredient, 0, len(m.ingredients))
+	for _, ingredient := range m.ingredients {
+		list = append(list, ingredient)
+	}
+	return list, nil
+}
+
+func (m *mockStore) CreateIngredientIfNotExists(_ context.Context, ingredient *Ingredient) (bool, error) {
+	if _, exists := m.ingredients[ingredient.Name]; exists {
+		return false, nil
+	}
+	m.ingredients[ingredient.Name] = ingredient
+	return true, nil
 }
 
 func (m *mockStore) SaveJob(_ context.Context, job *Job) error {
@@ -196,8 +214,18 @@ func withChiURLParam(r *http.Request, key, value string) *http.Request {
 func setupTest() (*mockStore, func()) {
 	mock := newMockStore()
 	origStore := dbStore
+	origLLM := invokeLLM
 	dbStore = mock
-	return mock, func() { dbStore = origStore }
+	// 既定では本物のBedrockを呼ばない。必要なテストだけ差し替える
+	invokeLLM = func(context.Context, string, []*ImageData) (string, error) {
+		return "", fmt.Errorf("LLM is not stubbed in this test")
+	}
+	resetIngredientMasterCache()
+	return mock, func() {
+		dbStore = origStore
+		invokeLLM = origLLM
+		resetIngredientMasterCache()
+	}
 }
 
 // --- Tests for IDOR ownership checks ---

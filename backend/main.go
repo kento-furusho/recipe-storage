@@ -71,6 +71,9 @@ type Recipe struct {
 	CategoryIDs []string  `json:"categoryIds,omitempty" dynamodbav:"categoryIds,omitempty"`
 	SourceURL   *string   `json:"sourceUrl" dynamodbav:"sourceUrl,omitempty"`
 	CreatedAt   time.Time `json:"createdAt" dynamodbav:"createdAt"`
+	// IngredientNames は材料を食材マスタの正規名に対応づけた一覧（調味料も含む）。
+	// nil は未処理（AIでの正規化がまだ、または失敗）を表す。
+	IngredientNames []string `json:"ingredientNames,omitempty" dynamodbav:"ingredientNames"`
 }
 
 type Category struct {
@@ -128,6 +131,14 @@ func main() {
 	bucketName = bucket
 	jobQueueURL = os.Getenv("JOB_QUEUE_URL")
 	youtubeAPIKey = os.Getenv("YOUTUBE_API_KEY")
+
+	// 既存レシピの材料を食材マスタに対応づけるバッチ（ローカルから手動で実行する）
+	if len(os.Args) > 1 && os.Args[1] == "backfill-ingredients" {
+		if err := runBackfillIngredients(ctx, os.Args[2:]); err != nil {
+			log.Fatalf("backfill-ingredients: %v", err)
+		}
+		return
+	}
 
 	// ルーターをセットアップ
 	r := setupRouter()

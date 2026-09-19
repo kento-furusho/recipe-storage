@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -325,10 +326,26 @@ func handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ingredientsChanged := !slices.Equal(recipe.Ingredients, req.Ingredients)
+
 	recipe.Title = req.Title
 	recipe.Ingredients = req.Ingredients
 	recipe.Steps = req.Steps
 	recipe.SourceURL = req.SourceURL
+
+	// 材料が変わった時だけ食材マスタへの対応づけをやり直す。
+	// 失敗しても保存は続け、古い対応づけは残さない（nil＝未処理）
+	if ingredientsChanged {
+		resolveCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		names, err := resolveIngredients(resolveCtx, recipe.Ingredients)
+		cancel()
+		if err != nil {
+			log.Printf("Failed to resolve ingredients for recipe %s: %v", recipe.RecipeID, err)
+			recipe.IngredientNames = nil
+		} else {
+			recipe.IngredientNames = names
+		}
+	}
 
 	// ImageKeysの更新（nilの場合は既存の値を保持）
 	if req.ImageKeys != nil {

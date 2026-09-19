@@ -51,6 +51,19 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # 食材マスタ（全ユーザー共通）。正規名 name がキー。レシピ保存時にAIが材料をここへ対応づけ、無ければ追加する
+  IngredientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: recipe-ingredients
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+
   CategoriesTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -161,6 +174,7 @@ Resources:
                 - !GetAtt RecipesTable.Arn
                 - !Sub "${RecipesTable.Arn}/index/*"
                 - !GetAtt CategoriesTable.Arn
+                - !GetAtt IngredientsTable.Arn
         - Statement:
             - Effect: Allow
               Action:
@@ -216,6 +230,7 @@ Resources:
               Resource:
                 - !GetAtt JobsTable.Arn
                 - !GetAtt RecipesTable.Arn
+                - !GetAtt IngredientsTable.Arn
         - Statement:
             - Effect: Allow
               Action:

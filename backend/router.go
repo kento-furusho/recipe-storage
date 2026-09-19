@@ -40,6 +40,8 @@ func setupRouter() *chi.Mux {
 	r.Delete("/recipes/{recipeId}", handleDeleteRecipe)
 	r.Put("/recipes/{recipeId}", handleUpdateRecipe)
 	r.Post("/recipes/bulk-categories", handleBulkAssignCategories)
+	r.Post("/recipes/search-by-ingredients", handleSearchRecipesByIngredients)
+	r.Get("/ingredients", handleGetIngredients)
 	r.Get("/categories", handleGetCategories)
 	r.Post("/categories", handleCreateCategory)
 	r.Put("/categories/{categoryId}", handleUpdateCategory)

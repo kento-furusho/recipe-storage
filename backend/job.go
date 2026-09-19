@@ -38,12 +38,15 @@ func processJob(jobID string) {
 
 	// YouTube URL優先 → 画像 → 一般URL → ダミー
 	hasSourceURL := job.SourceURL != nil && *job.SourceURL != ""
+	generatedByLLM := false
 	if hasSourceURL && isYouTubeURL(*job.SourceURL) {
 		recipe, recipeErr = generateRecipeFromYouTube(ctx, job)
 		if recipeErr != nil {
 			log.Printf("YouTube recipe generation failed, falling back to dummy: %v", recipeErr)
 			recipe = generateDummyRecipe(job)
 			recipeErr = nil
+		} else {
+			generatedByLLM = true
 		}
 	} else if len(job.ImageKeys) > 0 {
 		recipe, recipeErr = generateRecipeWithLLM(ctx, job)
@@ -51,6 +54,8 @@ func processJob(jobID string) {
 			log.Printf("Failed to generate recipe with LLM for job %s: %v, falling back to dummy", jobID, recipeErr)
 			recipe = generateDummyRecipe(job)
 			recipeErr = nil
+		} else {
+			generatedByLLM = true
 		}
 	} else if hasSourceURL {
 		recipe, recipeErr = generateRecipeFromWebPage(ctx, job)
@@ -58,9 +63,20 @@ func processJob(jobID string) {
 			log.Printf("Web page recipe generation failed for job %s, falling back to dummy: %v", jobID, recipeErr)
 			recipe = generateDummyRecipe(job)
 			recipeErr = nil
+		} else {
+			generatedByLLM = true
 		}
 	} else {
 		recipe = generateDummyRecipe(job)
+	}
+
+	// 材料を食材マスタに対応づける（食材からの検索用）。失敗してもレシピ自体は保存する
+	if generatedByLLM {
+		if names, err := resolveIngredients(ctx, recipe.Ingredients); err != nil {
+			log.Printf("Failed to resolve ingredients for job %s (saving without them): %v", jobID, err)
+		} else {
+			recipe.IngredientNames = names
+		}
 	}
 
 	// 再作成（上書き）の場合は既存レシピのIDを引き継ぎ、カテゴリと作成日を保持する

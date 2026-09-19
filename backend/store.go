@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	jobsTableName       = "recipe-jobs"
-	recipesTableName    = "recipe-recipes"
-	categoriesTableName = "recipe-categories"
+	jobsTableName        = "recipe-jobs"
+	recipesTableName     = "recipe-recipes"
+	categoriesTableName  = "recipe-categories"
+	ingredientsTableName = "recipe-ingredients"
 
 	// ユーザーごとのレシピを作成日順に引くGSI（template.yaml の RecipesTable を参照）
 	recipesByUserIndex = "userId-createdAt-index"
@@ -63,6 +64,10 @@ type Store interface {
 	GetCategory(ctx context.Context, categoryID string) (*Category, error)
 	DeleteCategory(ctx context.Context, categoryID string) error
 	ListCategories(ctx context.Context, userID string) ([]*Category, error)
+	// ListIngredients は食材マスタ（全ユーザー共通）を全件返す
+	ListIngredients(ctx context.Context) ([]*Ingredient, error)
+	// CreateIngredientIfNotExists は同名の食材がまだ無い時だけ登録する。既にあれば created=false
+	CreateIngredientIfNotExists(ctx context.Context, ingredient *Ingredient) (created bool, err error)
 }
 
 // DynamoDBStore はDynamoDBを使用したストレージ実装
@@ -351,6 +356,54 @@ func (s *DynamoDBStore) ListCategories(ctx context.Context, userID string) ([]*C
 		categories = append(categories, &category)
 	}
 	return categories, nil
+}
+
+// ListIngredients は食材マスタを全件取得する（数百件規模なのでScanで十分）
+func (s *DynamoDBStore) ListIngredients(ctx context.Context) ([]*Ingredient, error) {
+	input := &dynamodb.ScanInput{TableName: aws.String(ingredientsTableName)}
+	ingredients := make([]*Ingredient, 0)
+	for {
+		result, err := dynamoClient.Scan(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan ingredients: %w", err)
+		}
+		for _, item := range result.Items {
+			var ingredient Ingredient
+			if err := attributevalue.UnmarshalMap(item, &ingredient); err != nil {
+				continue
+			}
+			ingredients = append(ingredients, &ingredient)
+		}
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = result.LastEvaluatedKey
+	}
+	return ingredients, nil
+}
+
+// CreateIngredientIfNotExists は同名の食材がまだ無い時だけ登録する（条件付き書き込みで重複を防ぐ）
+func (s *DynamoDBStore) CreateIngredientIfNotExists(ctx context.Context, ingredient *Ingredient) (bool, error) {
+	item, err := attributevalue.MarshalMap(ingredient)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal ingredient: %w", err)
+	}
+	_, err = dynamoClient.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           aws.String(ingredientsTableName),
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(#name)"),
+		ExpressionAttributeNames: map[string]string{
+			"#name": "name", // name はDynamoDBの予約語
+		},
+	})
+	var conditionFailed *types.ConditionalCheckFailedException
+	if errors.As(err, &conditionFailed) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to put ingredient: %w", err)
+	}
+	return true, nil
 }
 
 var dbStore Store = &DynamoDBStore{}
