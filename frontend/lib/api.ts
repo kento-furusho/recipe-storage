@@ -248,11 +248,24 @@ export interface Category {
   updatedAt: string;
 }
 
+export interface RecipePage {
+  items: Recipe[];
+  nextCursor: string | null;
+}
+
 /**
- * レシピ一覧を取得する
+ * レシピ一覧を新しい順に1ページ分取得する。nextCursor があれば続きがある
  */
-export async function getRecipes(): Promise<Recipe[]> {
-  const response = await authFetch(`${API_BASE_URL}/recipes`);
+export async function getRecipesPage(options: {
+  limit?: number;
+  cursor?: string | null;
+  categoryId?: string;
+} = {}): Promise<RecipePage> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 10) });
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.categoryId) params.set("categoryId", options.categoryId);
+
+  const response = await authFetch(`${API_BASE_URL}/recipes?${params}`);
 
   if (!response.ok) {
     const errorText = await response.text();

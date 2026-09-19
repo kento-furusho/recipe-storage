@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -70,6 +71,58 @@ func (m *mockStore) ListRecipes(_ context.Context, userID string) ([]*Recipe, er
 		}
 	}
 	return result, nil
+}
+
+// ListRecipesPage は DynamoDBStore と同じく作成日の新しい順・カーソル方式でページを返す
+func (m *mockStore) ListRecipesPage(_ context.Context, userID, categoryID string, limit int, cursor string) ([]*Recipe, string, error) {
+	var all []*Recipe
+	for _, r := range m.recipes {
+		if r.UserID != userID {
+			continue
+		}
+		if categoryID != "" && !containsCategory(r.CategoryIDs, categoryID) {
+			continue
+		}
+		all = append(all, r)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].CreatedAt.After(all[j].CreatedAt)
+		}
+		return all[i].RecipeID > all[j].RecipeID
+	})
+
+	start := 0
+	if cursor != "" {
+		c, err := decodeRecipeCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		for i, r := range all {
+			if r.RecipeID == c.RecipeID {
+				start = i + 1
+				break
+			}
+		}
+	}
+
+	rest := all[start:]
+	if len(rest) <= limit {
+		return rest, "", nil
+	}
+	page := rest[:limit]
+	last := page[limit-1]
+	next := encodeRecipeCursor(recipeCursor{RecipeID: last.RecipeID, CreatedAt: last.CreatedAt.Format(time.RFC3339Nano)})
+	return page, next, nil
+}
+
+func containsCategory(ids []string, target string) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *mockStore) SaveCategory(_ context.Context, category *Category) error {
@@ -1054,6 +1107,158 @@ func TestHandleGetRecipes_SortOrder(t *testing.T) {
 	}
 	if recipes[0].RecipeID != "r2" {
 		t.Errorf("first recipe = %s, want r2 (newer)", recipes[0].RecipeID)
+	}
+}
+
+// seedRecipes は user-1 のレシピを n 件作る（r00 が最も古く、番号が大きいほど新しい）
+func seedRecipes(mock *mockStore, n int, categoryFor func(i int) []string) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("r%02d", i)
+		var cats []string
+		if categoryFor != nil {
+			cats = categoryFor(i)
+		}
+		mock.recipes[id] = &Recipe{
+			RecipeID: id, UserID: "user-1", Title: id,
+			Ingredients: []string{"a"}, Steps: []string{"a"},
+			CategoryIDs: cats,
+			CreatedAt:   base.Add(time.Duration(i) * time.Minute),
+		}
+	}
+	// 他ユーザーのレシピは結果に混ざらないこと
+	mock.recipes["other"] = &Recipe{RecipeID: "other", UserID: "user-2", Title: "other", CreatedAt: base.Add(time.Hour)}
+}
+
+func getRecipePage(t *testing.T, path string) RecipePageResponse {
+	t.Helper()
+	r := reqAsUser("GET", path, nil, "user-1")
+	w := httptest.NewRecorder()
+	handleGetRecipes(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, body = %s", path, w.Code, w.Body.String())
+	}
+	var resp RecipePageResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode: %v", err)
+	}
+	return resp
+}
+
+func TestHandleGetRecipes_Pagination(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	seedRecipes(mock, 13, nil)
+
+	first := getRecipePage(t, "/recipes?limit=10")
+	if len(first.Items) != 10 {
+		t.Fatalf("page1 got %d items, want 10", len(first.Items))
+	}
+	if first.Items[0].RecipeID != "r12" || first.Items[9].RecipeID != "r03" {
+		t.Errorf("page1 order = %s..%s, want r12..r03", first.Items[0].RecipeID, first.Items[9].RecipeID)
+	}
+	if first.NextCursor == nil {
+		t.Fatal("page1 nextCursor = nil, want cursor")
+	}
+
+	second := getRecipePage(t, "/recipes?limit=10&cursor="+*first.NextCursor)
+	if len(second.Items) != 3 {
+		t.Fatalf("page2 got %d items, want 3", len(second.Items))
+	}
+	if second.Items[0].RecipeID != "r02" || second.Items[2].RecipeID != "r00" {
+		t.Errorf("page2 order = %s..%s, want r02..r00", second.Items[0].RecipeID, second.Items[2].RecipeID)
+	}
+	if second.NextCursor != nil {
+		t.Errorf("page2 nextCursor = %q, want nil", *second.NextCursor)
+	}
+}
+
+func TestHandleGetRecipes_PaginationExactPage(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	seedRecipes(mock, 10, nil)
+
+	// ちょうど10件なら「もっと見る」は出さない
+	page := getRecipePage(t, "/recipes?limit=10")
+	if len(page.Items) != 10 || page.NextCursor != nil {
+		t.Errorf("got %d items, nextCursor=%v; want 10 items and no cursor", len(page.Items), page.NextCursor)
+	}
+}
+
+func TestHandleGetRecipes_PaginationCategoryFilter(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	// 偶数番号だけ cat-a
+	seedRecipes(mock, 30, func(i int) []string {
+		if i%2 == 0 {
+			return []string{"cat-a"}
+		}
+		return []string{"cat-b"}
+	})
+
+	first := getRecipePage(t, "/recipes?limit=10&categoryId=cat-a")
+	if len(first.Items) != 10 || first.NextCursor == nil {
+		t.Fatalf("page1 got %d items, nextCursor=%v; want 10 and a cursor", len(first.Items), first.NextCursor)
+	}
+	for _, r := range first.Items {
+		if !containsCategory(r.CategoryIDs, "cat-a") {
+			t.Errorf("recipe %s is not in cat-a", r.RecipeID)
+		}
+	}
+
+	second := getRecipePage(t, "/recipes?limit=10&categoryId=cat-a&cursor="+*first.NextCursor)
+	if len(second.Items) != 5 || second.NextCursor != nil {
+		t.Errorf("page2 got %d items, nextCursor=%v; want 5 and no cursor", len(second.Items), second.NextCursor)
+	}
+}
+
+func TestHandleGetRecipes_PaginationEmpty(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	page := getRecipePage(t, "/recipes?limit=10")
+	if page.Items == nil || len(page.Items) != 0 || page.NextCursor != nil {
+		t.Errorf("got items=%v nextCursor=%v; want [] and nil", page.Items, page.NextCursor)
+	}
+}
+
+func TestHandleGetRecipes_PaginationInvalidParams(t *testing.T) {
+	_, cleanup := setupTest()
+	defer cleanup()
+
+	for _, path := range []string{
+		"/recipes?limit=0",
+		"/recipes?limit=abc",
+		"/recipes?limit=10&cursor=not-a-valid-cursor!!",
+	} {
+		r := reqAsUser("GET", path, nil, "user-1")
+		w := httptest.NewRecorder()
+		handleGetRecipes(w, r)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", path, w.Code)
+		}
+	}
+}
+
+func TestHandleGetRecipes_PaginationLimitCapped(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	seedRecipes(mock, 60, nil)
+
+	page := getRecipePage(t, "/recipes?limit=1000")
+	if len(page.Items) != maxRecipePageSize {
+		t.Errorf("got %d items, want %d (capped)", len(page.Items), maxRecipePageSize)
+	}
+}
+
+func TestRecipeCursorRoundTrip(t *testing.T) {
+	c := recipeCursor{RecipeID: "abc", CreatedAt: "2026-01-01T00:00:00.123Z"}
+	got, err := decodeRecipeCursor(encodeRecipeCursor(c))
+	if err != nil || got != c {
+		t.Errorf("round trip = %+v, %v; want %+v", got, err, c)
+	}
+	if _, err := decodeRecipeCursor(encodeRecipeCursor(recipeCursor{RecipeID: "abc"})); err == nil {
+		t.Error("cursor without createdAt should be invalid")
 	}
 }
 

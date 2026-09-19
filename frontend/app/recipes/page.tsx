@@ -6,12 +6,14 @@ import {
   bulkAssignCategories,
   getCategories,
   getImageUrl,
-  getRecipes,
+  getRecipesPage,
   Category,
   Recipe,
 } from "@/lib/api";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const PAGE_SIZE = 10;
 
 export default function RecipesPage() {
   return (
@@ -23,8 +25,13 @@ export default function RecipesPage() {
 
 function RecipesContent() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // カテゴリを素早く切り替えた時に古いレスポンスで上書きしないためのリクエスト番号
+  const requestIdRef = useRef(0);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -44,65 +51,116 @@ function RecipesContent() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const bulkLimit = 50;
 
-  useEffect(() => {
-    loadRecipes();
+  // 表示するレシピのサムネイルURLを並列で取得してマージする
+  const loadImageUrls = useCallback(async (items: Recipe[]) => {
+    const keys = items
+      .map((recipe) => recipe.imageKeys?.[0])
+      .filter((key): key is string => !!key);
+    const entries = await Promise.all(
+      keys.map(async (key) => {
+        try {
+          return [key, await getImageUrl(key)] as const;
+        } catch (err) {
+          console.error(`Failed to get image URL for ${key}:`, err);
+          return null;
+        }
+      })
+    );
+    setImageUrls((prev) => {
+      const next = { ...prev };
+      for (const entry of entries) {
+        if (entry) next[entry[0]] = entry[1];
+      }
+      return next;
+    });
   }, []);
 
-  const loadRecipes = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await getRecipes();
-      setRecipes(data);
-      const categories = await getCategories();
-      const sorted = [...categories].sort((a, b) =>
-        a.name.localeCompare(b.name, "ja")
-      );
-      setAllCategories(sorted);
-      const map: Record<string, Category> = {};
-      for (const category of sorted) {
-        map[category.categoryId] = category;
-      }
-      setCategoryMap(map);
-      setSelectedRecipeIds(new Set());
-      setBulkResult(null);
-      setBulkError(null);
-
-      const urls: Record<string, string> = {};
-      for (const recipe of data) {
-        if (recipe.imageKeys && recipe.imageKeys.length > 0) {
-          try {
-            const url = await getImageUrl(recipe.imageKeys[0]);
-            urls[recipe.imageKeys[0]] = url;
-          } catch (err) {
-            console.error(
-              `Failed to get image URL for ${recipe.imageKeys[0]}:`,
-              err
-            );
-          }
+  // 先頭ページから読み直す（初回・カテゴリ変更・一括操作後）
+  const loadFirstPage = useCallback(
+    async (category: string) => {
+      const requestId = ++requestIdRef.current;
+      try {
+        setListLoading(true);
+        setError(null);
+        const page = await getRecipesPage({
+          limit: PAGE_SIZE,
+          categoryId: category === "all" ? undefined : category,
+        });
+        if (requestId !== requestIdRef.current) return;
+        setRecipes(page.items);
+        setNextCursor(page.nextCursor);
+        setSelectedRecipeIds(new Set());
+        loadImageUrls(page.items);
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        console.error("Failed to load recipes:", err);
+        setError(
+          err instanceof Error ? err.message : "レシピの読み込みに失敗しました"
+        );
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setListLoading(false);
+          setLoading(false);
         }
       }
-      setImageUrls(urls);
+    },
+    [loadImageUrls]
+  );
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const requestId = requestIdRef.current;
+    try {
+      setLoadingMore(true);
+      const page = await getRecipesPage({
+        limit: PAGE_SIZE,
+        cursor: nextCursor,
+        categoryId: selectedCategory === "all" ? undefined : selectedCategory,
+      });
+      // 読み込み中にカテゴリが切り替わっていたら捨てる
+      if (requestId !== requestIdRef.current) return;
+      setRecipes((prev) => [...prev, ...page.items]);
+      setNextCursor(page.nextCursor);
+      loadImageUrls(page.items);
     } catch (err) {
-      console.error("Failed to load recipes:", err);
+      console.error("Failed to load more recipes:", err);
       setError(
         err instanceof Error ? err.message : "レシピの読み込みに失敗しました"
       );
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
-  const filteredRecipes =
-    selectedCategory === "all"
-      ? recipes
-      : recipes.filter((recipe) =>
-          (recipe.categoryIds || []).includes(selectedCategory)
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const categories = await getCategories();
+        const sorted = [...categories].sort((a, b) =>
+          a.name.localeCompare(b.name, "ja")
         );
+        setAllCategories(sorted);
+        const map: Record<string, Category> = {};
+        for (const category of sorted) {
+          map[category.categoryId] = category;
+        }
+        setCategoryMap(map);
+      } catch (err) {
+        console.error("Failed to load categories:", err);
+      }
+    };
+    loadCategories();
+  }, []);
+
+  useEffect(() => {
+    setBulkResult(null);
+    setBulkError(null);
+    loadFirstPage(selectedCategory);
+  }, [selectedCategory, loadFirstPage]);
 
   const allSelected =
-    filteredRecipes.length > 0 &&
-    filteredRecipes.every((recipe) => selectedRecipeIds.has(recipe.recipeId));
+    recipes.length > 0 &&
+    recipes.every((recipe) => selectedRecipeIds.has(recipe.recipeId));
 
   const toggleSelectAll = () => {
     setBulkError(null);
@@ -110,13 +168,13 @@ function RecipesContent() {
     setSelectedRecipeIds((prev) => {
       if (allSelected) {
         const next = new Set(prev);
-        for (const recipe of filteredRecipes) {
+        for (const recipe of recipes) {
           next.delete(recipe.recipeId);
         }
         return next;
       }
       const combined = new Set(prev);
-      for (const recipe of filteredRecipes) {
+      for (const recipe of recipes) {
         combined.add(recipe.recipeId);
       }
       return combined;
@@ -181,7 +239,7 @@ function RecipesContent() {
       setBulkError(null);
       const result = await bulkAssignCategories(recipeIds, categoryIds);
       setBulkResult(result);
-      await loadRecipes();
+      await loadFirstPage(selectedCategory);
     } catch (err) {
       console.error("Failed to bulk assign categories:", err);
       setBulkError(
@@ -201,7 +259,8 @@ function RecipesContent() {
     );
   }
 
-  if (error) {
+  // 一覧を1件も表示できない時だけエラー画面にする（「もっと見る」の失敗では一覧を残す）
+  if (error && recipes.length === 0) {
     return (
       <div>
         <MobileHeader title="レシピ一覧" />
@@ -319,7 +378,9 @@ function RecipesContent() {
           </div>
         )}
 
-        {recipes.length === 0 ? (
+        {listLoading ? (
+          <div className="py-12 text-center text-stone-600">読み込み中...</div>
+        ) : recipes.length === 0 && selectedCategory === "all" ? (
           <div className="text-center py-12">
             <p className="text-stone-600 mb-4">
               まだレシピが登録されていません
@@ -331,7 +392,7 @@ function RecipesContent() {
               最初のレシピを登録する
             </Link>
           </div>
-        ) : filteredRecipes.length === 0 ? (
+        ) : recipes.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-stone-600">
               選択したカテゴリのレシピがありません
@@ -339,7 +400,7 @@ function RecipesContent() {
           </div>
         ) : (
           <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0 lg:grid-cols-3">
-            {filteredRecipes.map((recipe) => (
+            {recipes.map((recipe) => (
               <div
                 key={recipe.recipeId}
                 className="bg-white rounded-lg shadow-sm overflow-hidden"
@@ -410,6 +471,25 @@ function RecipesContent() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {error && recipes.length > 0 && (
+          <div className="mt-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        {!listLoading && nextCursor && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="min-h-[44px] w-full sm:w-auto px-8 py-3 rounded-lg border border-amber-200 bg-white text-base font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+            >
+              {loadingMore ? "読み込み中..." : "もっと見る"}
+            </button>
           </div>
         )}
       </div>

@@ -33,9 +33,23 @@ Resources:
       AttributeDefinitions:
         - AttributeName: recipeId
           AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
       KeySchema:
         - AttributeName: recipeId
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        # ユーザーごとのレシピを作成日の新しい順に引くためのインデックス（一覧のページネーション用）
+        - IndexName: userId-createdAt-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   CategoriesTable:
     Type: AWS::DynamoDB::Table
@@ -145,6 +159,7 @@ Resources:
               Resource:
                 - !GetAtt JobsTable.Arn
                 - !GetAtt RecipesTable.Arn
+                - !Sub "${RecipesTable.Arn}/index/*"
                 - !GetAtt CategoriesTable.Arn
         - Statement:
             - Effect: Allow

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,7 +17,37 @@ const (
 	jobsTableName       = "recipe-jobs"
 	recipesTableName    = "recipe-recipes"
 	categoriesTableName = "recipe-categories"
+
+	// ユーザーごとのレシピを作成日順に引くGSI（template.yaml の RecipesTable を参照）
+	recipesByUserIndex = "userId-createdAt-index"
 )
+
+// errInvalidCursor はページネーションのカーソルが不正な場合のエラー
+var errInvalidCursor = errors.New("invalid cursor")
+
+// recipeCursor はレシピ一覧の続きの位置を表す（最後に返したレシピのキー）。
+// userId はカーソルに含めず、認証情報から補完する（他人のデータを引けないようにするため）
+type recipeCursor struct {
+	RecipeID  string `json:"r"`
+	CreatedAt string `json:"c"`
+}
+
+func encodeRecipeCursor(c recipeCursor) string {
+	b, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func decodeRecipeCursor(s string) (recipeCursor, error) {
+	var c recipeCursor
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return c, errInvalidCursor
+	}
+	if err := json.Unmarshal(b, &c); err != nil || c.RecipeID == "" || c.CreatedAt == "" {
+		return c, errInvalidCursor
+	}
+	return c, nil
+}
 
 // Store はデータストアのインターフェース
 type Store interface {
@@ -24,6 +57,8 @@ type Store interface {
 	GetRecipe(ctx context.Context, recipeID string) (*Recipe, error)
 	DeleteRecipe(ctx context.Context, recipeID string) error
 	ListRecipes(ctx context.Context, userID string) ([]*Recipe, error)
+	// ListRecipesPage は作成日の新しい順に最大 limit 件を返す。続きがあれば次ページのカーソルを返す（なければ空文字）
+	ListRecipesPage(ctx context.Context, userID, categoryID string, limit int, cursor string) ([]*Recipe, string, error)
 	SaveCategory(ctx context.Context, category *Category) error
 	GetCategory(ctx context.Context, categoryID string) (*Category, error)
 	DeleteCategory(ctx context.Context, categoryID string) error
@@ -131,29 +166,114 @@ func (s *DynamoDBStore) DeleteRecipe(ctx context.Context, recipeID string) error
 	return nil
 }
 
-// ListRecipes はレシピ一覧をDynamoDBから取得する
+// ListRecipes はユーザーの全レシピを作成日の新しい順に取得する
 func (s *DynamoDBStore) ListRecipes(ctx context.Context, userID string) ([]*Recipe, error) {
-	result, err := dynamoClient.Scan(ctx, &dynamodb.ScanInput{
-		TableName:        aws.String(recipesTableName),
-		FilterExpression: aws.String("userId = :userId"),
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(recipesTableName),
+		IndexName:              aws.String(recipesByUserIndex),
+		KeyConditionExpression: aws.String("userId = :userId"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":userId": &types.AttributeValueMemberS{Value: userID},
 		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan recipes: %w", err)
+		ScanIndexForward: aws.Bool(false),
 	}
 
-	recipes := make([]*Recipe, 0, len(result.Items))
-	for _, item := range result.Items {
-		var recipe Recipe
-		if err := attributevalue.UnmarshalMap(item, &recipe); err != nil {
-			continue // エラーがあっても続行
+	recipes := make([]*Recipe, 0)
+	for {
+		result, err := dynamoClient.Query(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query recipes: %w", err)
 		}
-		recipes = append(recipes, &recipe)
+		for _, item := range result.Items {
+			var recipe Recipe
+			if err := attributevalue.UnmarshalMap(item, &recipe); err != nil {
+				continue // エラーがあっても続行
+			}
+			recipes = append(recipes, &recipe)
+		}
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = result.LastEvaluatedKey
 	}
 
 	return recipes, nil
+}
+
+// ListRecipesPage はユーザーのレシピを作成日の新しい順に最大 limit 件取得する。
+// categoryID を指定するとそのカテゴリのレシピだけに絞り込む。
+func (s *DynamoDBStore) ListRecipesPage(ctx context.Context, userID, categoryID string, limit int, cursor string) ([]*Recipe, string, error) {
+	values := map[string]types.AttributeValue{
+		":userId": &types.AttributeValueMemberS{Value: userID},
+	}
+	input := &dynamodb.QueryInput{
+		TableName:                 aws.String(recipesTableName),
+		IndexName:                 aws.String(recipesByUserIndex),
+		KeyConditionExpression:    aws.String("userId = :userId"),
+		ExpressionAttributeValues: values,
+		ScanIndexForward:          aws.Bool(false),
+		Limit:                     aws.Int32(int32(limit + 1)),
+	}
+	if categoryID != "" {
+		input.FilterExpression = aws.String("contains(categoryIds, :categoryId)")
+		values[":categoryId"] = &types.AttributeValueMemberS{Value: categoryID}
+	}
+	if cursor != "" {
+		c, err := decodeRecipeCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		input.ExclusiveStartKey = map[string]types.AttributeValue{
+			"recipeId":  &types.AttributeValueMemberS{Value: c.RecipeID},
+			"userId":    &types.AttributeValueMemberS{Value: userID},
+			"createdAt": &types.AttributeValueMemberS{Value: c.CreatedAt},
+		}
+	}
+
+	// DynamoDBは Limit 件を読んだ後に FilterExpression を適用するため、1回のQueryでは
+	// 件数が足りないことがある。続きの有無を正確に判定するため limit+1 件集まるまで読む。
+	type entry struct {
+		recipe    *Recipe
+		createdAt string // カーソル用に保存値そのままを保持
+	}
+	collected := make([]entry, 0, limit+1)
+	for len(collected) <= limit {
+		result, err := dynamoClient.Query(ctx, input)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to query recipes: %w", err)
+		}
+		for _, item := range result.Items {
+			var recipe Recipe
+			if err := attributevalue.UnmarshalMap(item, &recipe); err != nil {
+				continue
+			}
+			createdAt, _ := item["createdAt"].(*types.AttributeValueMemberS)
+			if createdAt == nil {
+				continue
+			}
+			collected = append(collected, entry{recipe: &recipe, createdAt: createdAt.Value})
+			if len(collected) > limit {
+				break
+			}
+		}
+		if result.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = result.LastEvaluatedKey
+	}
+
+	nextCursor := ""
+	if len(collected) > limit {
+		collected = collected[:limit]
+		last := collected[limit-1]
+		nextCursor = encodeRecipeCursor(recipeCursor{RecipeID: last.recipe.RecipeID, CreatedAt: last.createdAt})
+	}
+
+	recipes := make([]*Recipe, 0, len(collected))
+	for _, e := range collected {
+		recipes = append(recipes, e.recipe)
+	}
+	return recipes, nextCursor, nil
 }
 
 // SaveCategory はカテゴリをDynamoDBに保存する

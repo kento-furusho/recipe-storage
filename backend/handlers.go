@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -146,28 +148,76 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(job)
 }
 
-// handleGetRecipes はレシピ一覧取得ハンドラー
+const (
+	defaultRecipePageSize = 10
+	maxRecipePageSize     = 50
+)
+
+// RecipePageResponse はページ単位のレシピ一覧レスポンス
+type RecipePageResponse struct {
+	Items      []*Recipe `json:"items"`
+	NextCursor *string   `json:"nextCursor"`
+}
+
+// handleGetRecipes はレシピ一覧取得ハンドラー。
+// limit か cursor を指定するとページ単位（RecipePageResponse）で返す。
+// 指定なしは従来どおり全件の配列を返す（旧フロントとの互換のため）。
 func handleGetRecipes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserID(r)
-	recipes, err := dbStore.ListRecipes(ctx, userID)
+	query := r.URL.Query()
+	limitParam := query.Get("limit")
+	cursor := query.Get("cursor")
+
+	if limitParam == "" && cursor == "" {
+		recipes, err := dbStore.ListRecipes(ctx, userID)
+		if err != nil {
+			log.Printf("Failed to list recipes from DynamoDB: %v", err)
+			http.Error(w, "failed to list recipes", http.StatusInternalServerError)
+			return
+		}
+
+		// 作成日時の降順でソート（新しいものから）
+		sort.SliceStable(recipes, func(i, j int) bool {
+			return recipes[i].CreatedAt.After(recipes[j].CreatedAt)
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(recipes)
+		return
+	}
+
+	limit := defaultRecipePageSize
+	if limitParam != "" {
+		n, err := strconv.Atoi(limitParam)
+		if err != nil || n < 1 {
+			http.Error(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		limit = min(n, maxRecipePageSize)
+	}
+
+	recipes, nextCursor, err := dbStore.ListRecipesPage(ctx, userID, query.Get("categoryId"), limit, cursor)
+	if errors.Is(err, errInvalidCursor) {
+		http.Error(w, "invalid cursor", http.StatusBadRequest)
+		return
+	}
 	if err != nil {
-		log.Printf("Failed to list recipes from DynamoDB: %v", err)
+		log.Printf("Failed to list recipe page from DynamoDB: %v", err)
 		http.Error(w, "failed to list recipes", http.StatusInternalServerError)
 		return
 	}
 
-	// 作成日時の降順でソート（新しいものから）
-	for i := 0; i < len(recipes)-1; i++ {
-		for j := i + 1; j < len(recipes); j++ {
-			if recipes[i].CreatedAt.Before(recipes[j].CreatedAt) {
-				recipes[i], recipes[j] = recipes[j], recipes[i]
-			}
-		}
+	resp := RecipePageResponse{Items: recipes}
+	if resp.Items == nil {
+		resp.Items = []*Recipe{}
+	}
+	if nextCursor != "" {
+		resp.NextCursor = &nextCursor
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(recipes)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // handleGetRecipe はレシピ詳細取得ハンドラー
