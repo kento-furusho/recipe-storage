@@ -50,6 +50,8 @@ func TestBuildIngredientResolutionPrompt(t *testing.T) {
 		"- 玉ねぎのみじん切り: 1/2個",
 		"- 塩、こしょう: 適宜",
 		"鶏もも肉・鶏むね肉 → 鶏肉",
+		"ひき肉をそれに対応づけてはいけない",
+		"マヨネーズ・ケチャップ・だし",
 		"isStaple",
 	} {
 		if !strings.Contains(prompt, want) {

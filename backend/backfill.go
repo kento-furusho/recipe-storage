@@ -44,13 +44,21 @@ func (d *dryRunIngredientStore) CreateIngredientIfNotExists(_ context.Context, i
 
 // runBackfillIngredients は既存レシピの材料を食材マスタに対応づける。
 //
-//	go run . backfill-ingredients [-dry-run] [-force]
+//	go run . backfill-ingredients [-dry-run] [-force] [-recipe id1,id2]
 func runBackfillIngredients(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("backfill-ingredients", flag.ContinueOnError)
 	dryRun := fs.Bool("dry-run", false, "食材マスタにもレシピにも書き込まず、結果だけ表示する")
 	force := fs.Bool("force", false, "対応づけ済みのレシピもやり直す")
+	recipeIDs := fs.String("recipe", "", "指定したレシピID（カンマ区切り）だけをやり直す（-force を含む）")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	onlyIDs := make(map[string]bool)
+	for _, id := range strings.Split(*recipeIDs, ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			onlyIDs[id] = true
+			*force = true
+		}
 	}
 
 	recipes, err := scanAllRecipes(ctx)
@@ -63,6 +71,9 @@ func runBackfillIngredients(ctx context.Context, args []string) error {
 	targets := make([]*Recipe, 0, len(recipes))
 	skippedDone, skippedDummy := 0, 0
 	for _, recipe := range recipes {
+		if len(onlyIDs) > 0 && !onlyIDs[recipe.RecipeID] {
+			continue
+		}
 		switch {
 		case len(recipe.Ingredients) == 0 || slices.Equal(recipe.Ingredients, dummyIngredients):
 			skippedDummy++
