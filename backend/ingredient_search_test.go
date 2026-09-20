@@ -214,6 +214,8 @@ func TestFilterRecipesByKeyword(t *testing.T) {
 		{"複数一致は元の並び順", "肉", "", []string{"teriyaki", "mapo"}},
 		{"空白の違いを吸収", "豚 ひき肉", "", []string{"mapo"}},
 		{"全角と半角の違いを吸収", "abcトマト", "", []string{"salad"}},
+		{"ひらがなでカタカナを引ける", "なす", "", []string{"mapo"}},
+		{"カタカナでひらがなを引ける", "キュウリ", "", []string{"salad"}},
 		{"カテゴリと併用", "肉", "cat-b", []string{"mapo"}},
 		{"一致なし", "カレー", "", []string{}},
 		{"キーワードなしはカテゴリだけで絞る", "", "cat-a", []string{"teriyaki", "mapo"}},

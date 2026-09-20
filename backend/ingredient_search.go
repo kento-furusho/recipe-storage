@@ -17,9 +17,20 @@ const (
 	maxMissingIngredients = 2
 )
 
-// normalizeForKeyword は全角/半角・大文字小文字・空白の違いを吸収する（検索語と対象の両方に使う）
+// normalizeForKeyword は全角/半角・大文字小文字・空白・カタカナ/ひらがなの違いを
+// 吸収する（検索語と対象の両方に使う）。「なす」で「ナス」も引けるようにするため。
 func normalizeForKeyword(s string) string {
-	return strings.ToLower(canonicalizeIngredientName(s))
+	return katakanaToHiragana(strings.ToLower(canonicalizeIngredientName(s)))
+}
+
+func katakanaToHiragana(s string) string {
+	return strings.Map(func(r rune) rune {
+		// ァ(30A1)〜ヶ(30F6) をひらがなに寄せる。「ー」や記号はそのまま
+		if r >= 'ァ' && r <= 'ヶ' {
+			return r - 0x60
+		}
+		return r
+	}, s)
 }
 
 // filterRecipesByKeyword はレシピ名と材料（元の文字列）へのキーワード部分一致で絞り込む。
