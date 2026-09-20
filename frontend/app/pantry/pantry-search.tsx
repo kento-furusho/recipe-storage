@@ -161,7 +161,7 @@ export default function PantrySearch() {
             家にある食材は？
           </h2>
           <p className="text-[13.5px] leading-[1.5] text-[#8A8178]">
-            入れた食材で作れる保存済みレシピを探します。塩・しょうゆなどの基本調味料は入れなくて大丈夫です。
+            入れた食材で作れる保存済みレシピを探します。
           </p>
         </div>
 
