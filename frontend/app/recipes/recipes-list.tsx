@@ -24,6 +24,8 @@ export default function RecipesList() {
   const [error, setError] = useState<string | null>(null);
   // カテゴリを素早く切り替えた時に古いレスポンスで上書きしないためのリクエスト番号
   const requestIdRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [keyword, setKeyword] = useState("");
@@ -103,8 +105,10 @@ export default function RecipesList() {
     [loadImageUrls]
   );
 
-  const loadMore = async () => {
-    if (!nextCursor || loadingMore) return;
+  const loadMore = useCallback(async () => {
+    // state の反映待ちで二重に走らないよう ref でも見張る
+    if (!nextCursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
     const requestId = requestIdRef.current;
     try {
       setLoadingMore(true);
@@ -113,7 +117,7 @@ export default function RecipesList() {
         cursor: nextCursor,
         categoryId: selectedCategory === "all" ? undefined : selectedCategory,
       });
-      // 読み込み中にカテゴリが切り替わっていたら捨てる
+      // 読み込み中にカテゴリや検索語が切り替わっていたら捨てる
       if (requestId !== requestIdRef.current) return;
       setRecipes((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
@@ -124,9 +128,43 @@ export default function RecipesList() {
         err instanceof Error ? err.message : "レシピの読み込みに失敗しました"
       );
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  };
+  }, [nextCursor, selectedCategory, loadImageUrls]);
+
+  // 一覧の末尾が近づいたら次のページを自動で読み込む
+  useEffect(() => {
+    if (!nextCursor) return;
+
+    const checkAndLoad = () => {
+      const sentinel = sentinelRef.current;
+      if (!sentinel) return;
+      // 末尾が画面の200px手前まで来たら読み始める
+      if (sentinel.getBoundingClientRect().top - window.innerHeight < 200) {
+        loadMore();
+      }
+    };
+
+    let scheduled = false;
+    const onScroll = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        checkAndLoad();
+      });
+    };
+
+    // 1ページ目で画面が埋まらない場合もあるので、まず一度確認する
+    checkAndLoad();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [nextCursor, loadMore]);
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -512,16 +550,12 @@ export default function RecipesList() {
           </div>
         )}
 
+        {/* 末尾まで来たら自動で次のページを読み込む（この目印が見えたら発火） */}
         {!listLoading && nextCursor && (
-          <div className="mt-6 flex justify-center">
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="min-h-[44px] w-full sm:w-auto px-8 py-3 rounded-lg border border-amber-200 bg-white text-base font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-            >
-              {loadingMore ? "読み込み中..." : "もっと見る"}
-            </button>
+          <div ref={sentinelRef} className="mt-6 flex justify-center py-4">
+            <span className="text-sm text-stone-500">
+              {loadingMore ? "読み込み中..." : ""}
+            </span>
           </div>
         )}
       </div>
