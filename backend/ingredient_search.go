@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -15,6 +16,40 @@ const (
 	// 足りない食材がこの数以下のレシピまで結果に出す
 	maxMissingIngredients = 2
 )
+
+// normalizeForKeyword は全角/半角・大文字小文字・空白の違いを吸収する（検索語と対象の両方に使う）
+func normalizeForKeyword(s string) string {
+	return strings.ToLower(canonicalizeIngredientName(s))
+}
+
+// filterRecipesByKeyword はレシピ名と材料（元の文字列）へのキーワード部分一致で絞り込む。
+// categoryID を指定するとそのカテゴリのレシピだけにする。並び順は渡された順のまま。
+func filterRecipesByKeyword(recipes []*Recipe, keyword, categoryID string) []*Recipe {
+	key := normalizeForKeyword(keyword)
+	matched := make([]*Recipe, 0)
+	for _, recipe := range recipes {
+		if categoryID != "" && !slices.Contains(recipe.CategoryIDs, categoryID) {
+			continue
+		}
+		if key != "" && !recipeMatchesKeyword(recipe, key) {
+			continue
+		}
+		matched = append(matched, recipe)
+	}
+	return matched
+}
+
+func recipeMatchesKeyword(recipe *Recipe, normalizedKeyword string) bool {
+	if strings.Contains(normalizeForKeyword(recipe.Title), normalizedKeyword) {
+		return true
+	}
+	for _, ingredient := range recipe.Ingredients {
+		if strings.Contains(normalizeForKeyword(ingredient), normalizedKeyword) {
+			return true
+		}
+	}
+	return false
+}
 
 type IngredientSearchRequest struct {
 	Ingredients []string `json:"ingredients"`

@@ -34,6 +34,9 @@ function RecipesContent() {
   const requestIdRef = useRef(0);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [keyword, setKeyword] = useState("");
+  // 実際に検索に使われた語（結果の見出し用。入力中の語とはずれる）
+  const [appliedKeyword, setAppliedKeyword] = useState("");
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [categoryMap, setCategoryMap] = useState<Record<string, Category>>({});
   const [bulkMode, setBulkMode] = useState(false);
@@ -75,9 +78,9 @@ function RecipesContent() {
     });
   }, []);
 
-  // 先頭ページから読み直す（初回・カテゴリ変更・一括操作後）
+  // 先頭ページから読み直す（初回・カテゴリ変更・検索・一括操作後）
   const loadFirstPage = useCallback(
-    async (category: string) => {
+    async (category: string, keyword: string) => {
       const requestId = ++requestIdRef.current;
       try {
         setListLoading(true);
@@ -85,6 +88,7 @@ function RecipesContent() {
         const page = await getRecipesPage({
           limit: PAGE_SIZE,
           categoryId: category === "all" ? undefined : category,
+          q: keyword.trim() || undefined,
         });
         if (requestId !== requestIdRef.current) return;
         setRecipes(page.items);
@@ -152,11 +156,16 @@ function RecipesContent() {
     loadCategories();
   }, []);
 
+  // カテゴリ変更は即時、キーワードは入力から0.3秒後に読み直す
   useEffect(() => {
     setBulkResult(null);
     setBulkError(null);
-    loadFirstPage(selectedCategory);
-  }, [selectedCategory, loadFirstPage]);
+    const timer = setTimeout(() => {
+      setAppliedKeyword(keyword.trim());
+      loadFirstPage(selectedCategory, keyword);
+    }, keyword === "" ? 0 : 300);
+    return () => clearTimeout(timer);
+  }, [selectedCategory, keyword, loadFirstPage]);
 
   const allSelected =
     recipes.length > 0 &&
@@ -239,7 +248,7 @@ function RecipesContent() {
       setBulkError(null);
       const result = await bulkAssignCategories(recipeIds, categoryIds);
       setBulkResult(result);
-      await loadFirstPage(selectedCategory);
+      await loadFirstPage(selectedCategory, keyword);
     } catch (err) {
       console.error("Failed to bulk assign categories:", err);
       setBulkError(
@@ -299,8 +308,27 @@ function RecipesContent() {
       />
 
       {/* Sticky filter bar */}
-      {allCategories.length > 0 && (
-        <div className="sticky top-[48px] z-30 bg-white/80 backdrop-blur-sm border-b border-stone-100 px-3 py-2 sm:px-4">
+      <div className="sticky top-[48px] z-30 bg-white/80 backdrop-blur-sm border-b border-stone-100 px-3 py-2 sm:px-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <input
+            type="search"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder="レシピ名・材料で検索"
+            className="w-full rounded-lg border border-amber-100 bg-white pl-3 pr-9 py-2 text-base text-stone-700 focus:ring-2 focus:ring-amber-200 focus:border-amber-200"
+          />
+          {keyword && (
+            <button
+              type="button"
+              onClick={() => setKeyword("")}
+              aria-label="検索をクリア"
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-stone-400 hover:text-stone-600"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {allCategories.length > 0 && (
           <select
             value={selectedCategory}
             onChange={(event) => setSelectedCategory(event.target.value)}
@@ -313,8 +341,8 @@ function RecipesContent() {
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="px-3 py-4 sm:px-4 lg:px-6">
         {/* Bulk mode panel */}
@@ -378,8 +406,20 @@ function RecipesContent() {
           </div>
         )}
 
+        {!listLoading && appliedKeyword && (
+          <p className="mb-3 text-sm text-stone-600">
+            「{appliedKeyword}」の検索結果 {recipes.length}件
+          </p>
+        )}
+
         {listLoading ? (
           <div className="py-12 text-center text-stone-600">読み込み中...</div>
+        ) : recipes.length === 0 && appliedKeyword ? (
+          <div className="text-center py-12">
+            <p className="text-stone-600">
+              「{appliedKeyword}」に一致するレシピがありません
+            </p>
+          </div>
         ) : recipes.length === 0 && selectedCategory === "all" ? (
           <div className="text-center py-12">
             <p className="text-stone-600 mb-4">

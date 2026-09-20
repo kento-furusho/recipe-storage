@@ -260,10 +260,13 @@ export async function getRecipesPage(options: {
   limit?: number;
   cursor?: string | null;
   categoryId?: string;
+  /** レシピ名と材料を対象にしたキーワード検索。指定時はページ送りせず一度に返る */
+  q?: string;
 } = {}): Promise<RecipePage> {
   const params = new URLSearchParams({ limit: String(options.limit ?? 10) });
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.categoryId) params.set("categoryId", options.categoryId);
+  if (options.q) params.set("q", options.q);
 
   const response = await authFetch(`${API_BASE_URL}/recipes?${params}`);
 

@@ -152,6 +152,8 @@ func handleGetJob(w http.ResponseWriter, r *http.Request) {
 const (
 	defaultRecipePageSize = 10
 	maxRecipePageSize     = 50
+	// キーワード検索で一度に返す最大件数
+	maxKeywordSearchResults = 100
 )
 
 // RecipePageResponse はページ単位のレシピ一覧レスポンス
@@ -170,7 +172,7 @@ func handleGetRecipes(w http.ResponseWriter, r *http.Request) {
 	limitParam := query.Get("limit")
 	cursor := query.Get("cursor")
 
-	if limitParam == "" && cursor == "" {
+	if limitParam == "" && cursor == "" && strings.TrimSpace(query.Get("q")) == "" {
 		recipes, err := dbStore.ListRecipes(ctx, userID)
 		if err != nil {
 			log.Printf("Failed to list recipes from DynamoDB: %v", err)
@@ -196,6 +198,25 @@ func handleGetRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		limit = min(n, maxRecipePageSize)
+	}
+
+	// キーワード検索はレシピ名と材料の文字列を対象にする。件数が少ないので
+	// ページ送りはせず、最大 maxKeywordSearchResults 件まで一度に返す
+	if keyword := strings.TrimSpace(query.Get("q")); keyword != "" {
+		recipes, err := dbStore.ListRecipes(ctx, userID)
+		if err != nil {
+			log.Printf("Failed to list recipes for keyword search: %v", err)
+			http.Error(w, "failed to list recipes", http.StatusInternalServerError)
+			return
+		}
+		matched := filterRecipesByKeyword(recipes, keyword, query.Get("categoryId"))
+		if len(matched) > maxKeywordSearchResults {
+			matched = matched[:maxKeywordSearchResults]
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(RecipePageResponse{Items: matched})
+		return
 	}
 
 	recipes, nextCursor, err := dbStore.ListRecipesPage(ctx, userID, query.Get("categoryId"), limit, cursor)

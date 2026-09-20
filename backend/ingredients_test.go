@@ -49,7 +49,9 @@ func TestBuildIngredientResolutionPrompt(t *testing.T) {
 		"塩 / 調味料（基本調味料）",
 		"- 玉ねぎのみじん切り: 1/2個",
 		"- 塩、こしょう: 適宜",
-		"鶏もも肉・鶏むね肉 → 鶏肉",
+		"豚バラ肉・豚こま切れ肉 → 豚肉",
+		"鶏むね肉（鶏胸肉も同じ）・鶏もも肉・鶏ささみ・手羽先・手羽元・手羽中",
+		"部位が分かるならそれに対応づけてはいけない",
 		"ひき肉をそれに対応づけてはいけない",
 		"マヨネーズ・ケチャップ・だし",
 		"isStaple",
@@ -96,7 +98,8 @@ func TestResolveIngredients(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	want := []string{"玉ねぎ", "ズッキーニ", "鶏肉", "ベーコン", "塩"}
+	// 材料に「鶏もも肉」とあるので、AIが「鶏肉」と答えても部位に直す
+	want := []string{"玉ねぎ", "ズッキーニ", "鶏もも肉", "ベーコン", "塩"}
 	if !slices.Equal(names, want) {
 		t.Errorf("names = %v, want %v", names, want)
 	}
@@ -112,12 +115,16 @@ func TestResolveIngredients(t *testing.T) {
 	if zucchini == nil || zucchini.Category != "野菜" || !slices.Equal(zucchini.Aliases, []string{"ずっきーに"}) {
 		t.Errorf("ズッキーニ = %+v", zucchini)
 	}
-	// isNew=false でもマスタに無ければ登録し、不明な分類は「その他」
-	if chicken := mock.ingredients["鶏肉"]; chicken == nil || chicken.Category != "その他" {
-		t.Errorf("鶏肉 = %+v", chicken)
+	// 部位に直した食材もマスタに登録される
+	if thigh := mock.ingredients["鶏もも肉"]; thigh == nil || thigh.Category != "肉" {
+		t.Errorf("鶏もも肉 = %+v", thigh)
 	}
 	if bacon := mock.ingredients["ベーコン"]; bacon == nil || bacon.Category != "その他" {
 		t.Errorf("ベーコン (from half-width kana) = %+v", bacon)
+	}
+	// 玉ねぎ・塩・ズッキーニ・ベーコン・鶏もも肉。AIが答えた総称の「鶏肉」は登録しない
+	if _, exists := mock.ingredients["鶏肉"]; exists {
+		t.Error("部位が分かる場合、総称の鶏肉は登録しない")
 	}
 	if len(mock.ingredients) != 5 {
 		t.Errorf("master has %d ingredients, want 5", len(mock.ingredients))
@@ -199,7 +206,7 @@ func TestHandleUpdateRecipe_ResolvesIngredientsOnlyWhenChanged(t *testing.T) {
 
 	// 材料が変わった → 対応づけをやり直す
 	got = update(`{"title":"t","ingredients":["鶏もも肉: 1枚"],"steps":["s"]}`)
-	if len(*prompts) != 1 || !slices.Equal(got.IngredientNames, []string{"鶏肉"}) {
+	if len(*prompts) != 1 || !slices.Equal(got.IngredientNames, []string{"鶏もも肉"}) {
 		t.Errorf("changed ingredients: prompts=%d names=%v", len(*prompts), got.IngredientNames)
 	}
 
@@ -208,5 +215,129 @@ func TestHandleUpdateRecipe_ResolvesIngredientsOnlyWhenChanged(t *testing.T) {
 	got = update(`{"title":"t","ingredients":["豚肉: 200g"],"steps":["s"]}`)
 	if got.IngredientNames != nil || !slices.Equal(got.Ingredients, []string{"豚肉: 200g"}) {
 		t.Errorf("LLM failure: names=%v ingredients=%v", got.IngredientNames, got.Ingredients)
+	}
+}
+
+func TestDetectChickenParts(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		want  []string
+	}{
+		{"もも肉", []string{"鶏もも肉: 大1枚"}, []string{"鶏もも肉"}},
+		{"胸肉の表記ゆれ", []string{"鶏胸肉 1枚（250g）"}, []string{"鶏むね肉"}},
+		{"むね肉", []string{"鶏むね肉: 1枚 (約300g)"}, []string{"鶏むね肉"}},
+		{"ささみは鶏の語がなくてもよい", []string{"ささみ 2本"}, []string{"鶏ささみ"}},
+		{"手羽元", []string{"鶏手羽元 12本"}, []string{"手羽元"}},
+		{"鶏スペアリブは手羽中", []string{"鶏スペアリブ 8本（180g）"}, []string{"手羽中"}},
+		{"豚もも肉は対象外", []string{"豚もも肉 200g"}, []string{}},
+		{"豚スペアリブは対象外", []string{"豚スペアリブ: 8本"}, []string{}},
+		{"鶏ひき肉は部位にしない", []string{"鶏ひき肉 150g"}, []string{}},
+		{"部位なしの鶏肉", []string{"鶏肉 300g"}, []string{}},
+		{"複数の部位", []string{"鶏もも肉 1枚", "鶏むね肉 1枚", "鶏もも肉 追加"}, []string{"鶏もも肉", "鶏むね肉"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectChickenParts(tt.lines); !slices.Equal(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyChickenParts(t *testing.T) {
+	tests := []struct {
+		name  string
+		names []string
+		parts []string
+		want  []string
+	}{
+		{"総称を部位に置き換える", []string{"玉ねぎ", "鶏肉", "塩"}, []string{"鶏もも肉"}, []string{"玉ねぎ", "鶏もも肉", "塩"}},
+		{"AIが既に部位を返していれば変わらない", []string{"鶏もも肉", "塩"}, []string{"鶏もも肉"}, []string{"鶏もも肉", "塩"}},
+		{"鶏肉が無ければ末尾に足す", []string{"玉ねぎ"}, []string{"手羽元"}, []string{"玉ねぎ", "手羽元"}},
+		{"部位が2つなら両方に展開", []string{"鶏肉", "塩"}, []string{"鶏もも肉", "鶏むね肉"}, []string{"鶏もも肉", "鶏むね肉", "塩"}},
+		{"部位が無ければそのまま", []string{"鶏肉"}, []string{}, []string{"鶏肉"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := applyChickenParts(tt.names, tt.parts); !slices.Equal(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// AIが「鶏肉」と答えても、材料の文字から部位に直してマスタにも登録する
+func TestResolveIngredients_ChickenPartOverridesLLM(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	mock.ingredients["鶏肉"] = &Ingredient{Name: "鶏肉", Category: "肉"}
+	mock.ingredients["塩"] = &Ingredient{Name: "塩", Category: "調味料", IsStaple: true}
+	stubLLM(`{"ingredients":[{"name":"鶏肉","isNew":false},{"name":"塩","isNew":false}]}`, nil)
+
+	names, err := resolveIngredients(context.Background(), []string{"鶏もも肉: 大1枚", "塩: 少々"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slices.Equal(names, []string{"鶏もも肉", "塩"}) {
+		t.Fatalf("names = %v, want [鶏もも肉 塩]", names)
+	}
+	if got := mock.ingredients["鶏もも肉"]; got == nil || got.Category != "肉" {
+		t.Errorf("鶏もも肉 in master = %+v", got)
+	}
+}
+
+// AIが部位名（鶏手羽元など）を返しても、こちらの判定した部位に置き換えて重複させない
+func TestResolveIngredients_ChickenPartNoDuplicate(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	stubLLM(`{"ingredients":[{"name":"鶏手羽元","isNew":true,"category":"肉"},{"name":"玉ねぎ","isNew":true,"category":"野菜"}]}`, nil)
+
+	names, err := resolveIngredients(context.Background(), []string{"鶏手羽元 12本", "玉ねぎ 1個"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slices.Equal(names, []string{"手羽元", "玉ねぎ"}) {
+		t.Errorf("names = %v, want [手羽元 玉ねぎ]", names)
+	}
+	if _, exists := mock.ingredients["鶏手羽元"]; exists {
+		t.Error("AIが返した鶏手羽元をマスタに登録してはいけない")
+	}
+	if mock.ingredients["手羽元"] == nil {
+		t.Error("手羽元 should be registered")
+	}
+}
+
+// 「鶏肉」の別名に部位名を入れない（検索で部位が総称に寄るのを防ぐ）
+func TestResolveIngredients_ChickenPartNotUsedAsAlias(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	stubLLM(`{"ingredients":[{"name":"鶏肉","isNew":true,"category":"肉","aliases":["とり肉","鶏もも肉"]}]}`, nil)
+
+	if _, err := resolveIngredients(context.Background(), []string{"鶏肉 300g"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	chicken := mock.ingredients["鶏肉"]
+	if chicken == nil || !slices.Equal(chicken.Aliases, []string{"とり肉"}) {
+		t.Errorf("鶏肉 aliases = %+v, want [とり肉]", chicken)
+	}
+}
+
+// マスタの別名に部位名が残っていても、部位の食材を取りこぼさず登録する
+func TestResolveIngredients_RegistersPartEvenIfAliasedElsewhere(t *testing.T) {
+	mock, cleanup := setupTest()
+	defer cleanup()
+	mock.ingredients["鶏肉"] = &Ingredient{Name: "鶏肉", Aliases: []string{"鶏もも肉"}, Category: "肉"}
+	stubLLM(`{"ingredients":[{"name":"鶏肉","isNew":false}]}`, nil)
+
+	names, err := resolveIngredients(context.Background(), []string{"鶏もも肉 1枚"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !slices.Equal(names, []string{"鶏もも肉"}) {
+		t.Errorf("names = %v, want [鶏もも肉]", names)
+	}
+	if mock.ingredients["鶏もも肉"] == nil {
+		t.Error("鶏もも肉 should be registered in the master")
 	}
 }

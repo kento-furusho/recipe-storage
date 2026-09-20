@@ -153,7 +153,10 @@ func buildIngredientResolutionPrompt(rawLines []string, master []*Ingredient) st
 
 	p.WriteString("\n【ルール】\n")
 	p.WriteString("- 同じ食材が食材マスタにあれば、必ずその名前をそのまま使い isNew を false にする（別名も参照する）\n")
-	p.WriteString("- 部位や切り方は区別しない（例: 鶏もも肉・鶏むね肉 → 鶏肉、豚バラ肉 → 豚肉、玉ねぎのみじん切り → 玉ねぎ）\n")
+	p.WriteString("- 豚肉・牛肉の部位や、切り方は区別しない（例: 豚バラ肉・豚こま切れ肉 → 豚肉、玉ねぎのみじん切り → 玉ねぎ）\n")
+	p.WriteString("- ただし鶏肉は部位ごとに分ける。鶏むね肉（鶏胸肉も同じ）・鶏もも肉・鶏ささみ・手羽先・手羽元・手羽中のいずれかにし、")
+	p.WriteString("部位が書かれていない場合だけ「鶏肉」にする。食材マスタに「鶏肉」があっても、部位が分かるならそれに対応づけてはいけない\n")
+	p.WriteString("- 「鶏の煮汁」「ゆで汁」のように調理の途中でできるものは食材に含めない\n")
 	p.WriteString("- ただし、ひき肉（挽き肉・ミンチ）は塊や薄切りの肉とは別の食材。豚ひき肉・鶏ひき肉・牛ひき肉・合いびき肉のどれかにする。")
 	p.WriteString("食材マスタに「豚肉」などがあっても、ひき肉をそれに対応づけてはいけない。マスタに該当するひき肉が無ければ isNew を true にする\n")
 	p.WriteString("- 「あれば」「好みで」「お好みで」と書かれた材料、飾り・トッピング用の材料、水は含めない\n")
@@ -218,9 +221,25 @@ func resolveIngredients(ctx context.Context, rawLines []string) ([]string, error
 	lookup := buildIngredientLookup(master)
 	names := make([]string, 0, len(resolved))
 	seen := make(map[string]bool, len(resolved))
+	// 鶏肉の部位は材料の文字から決めるので、AIが返した鶏肉系の名前は使わない
+	chickenParts := detectChickenParts(lines)
+	chickenInserted := false
 	for _, item := range resolved {
 		key := canonicalizeIngredientName(item.Name)
 		if key == "" {
+			continue
+		}
+
+		if len(chickenParts) > 0 && isChickenName(key) {
+			if !chickenInserted {
+				chickenInserted = true
+				for _, part := range chickenParts {
+					if !seen[part] {
+						seen[part] = true
+						names = append(names, part)
+					}
+				}
+			}
 			continue
 		}
 
@@ -247,7 +266,132 @@ func resolveIngredients(ctx context.Context, rawLines []string) ([]string, error
 			names = append(names, name)
 		}
 	}
+
+	// 鶏肉の部位はAIの判断に任せず、材料の文字から決める
+	names = applyChickenParts(names, chickenParts)
+	// 部位の食材がマスタに無ければ登録する。別名ではなく名前そのもので確認する
+	// （「鶏肉」の別名に「鶏もも肉」が入っている、といった状態でも取りこぼさないため）
+	masterNames := make(map[string]bool, len(master))
+	for _, ingredient := range master {
+		masterNames[ingredient.Name] = true
+	}
+	for _, name := range names {
+		if masterNames[name] {
+			continue
+		}
+		ingredient := &Ingredient{Name: name, Aliases: []string{}, Category: "肉", CreatedAt: time.Now()}
+		if _, err := dbStore.CreateIngredientIfNotExists(ctx, ingredient); err != nil {
+			return nil, fmt.Errorf("failed to create ingredient %q: %w", name, err)
+		}
+		addToIngredientMasterCache(ingredient)
+		masterNames[name] = true
+		log.Printf("Registered new chicken part: %s", name)
+	}
+
 	return names, nil
+}
+
+// --- 鶏肉の部位の判定（AI任せにせず、材料の文字から確実に決める） ---
+
+// chickenPartRules は材料の行から鶏肉の部位を判定する規則。上から順に最初に当たったものを採用する。
+// 「ささみ」「手羽」は鶏にしか使わないが、「むね」「もも」「スペアリブ」は
+// 豚もも肉などと紛れるため、同じ行に鶏を表す語があるときだけ採用する。
+var chickenPartRules = []struct {
+	keywords     []string
+	needsChicken bool
+	name         string
+}{
+	{keywords: []string{"ささみ", "ササミ", "笹身"}, name: "鶏ささみ"},
+	{keywords: []string{"手羽先"}, name: "手羽先"},
+	{keywords: []string{"手羽元"}, name: "手羽元"},
+	{keywords: []string{"手羽中"}, name: "手羽中"},
+	{keywords: []string{"スペアリブ"}, needsChicken: true, name: "手羽中"},
+	{keywords: []string{"むね", "ムネ", "胸"}, needsChicken: true, name: "鶏むね肉"},
+	{keywords: []string{"もも", "モモ"}, needsChicken: true, name: "鶏もも肉"},
+}
+
+var chickenWords = []string{"鶏", "鳥", "とり", "チキン"}
+
+func containsAny(s string, candidates []string) bool {
+	for _, c := range candidates {
+		if strings.Contains(s, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// detectChickenParts は材料の行から鶏肉の部位名を拾う（重複なし・登場順）
+func detectChickenParts(rawLines []string) []string {
+	parts := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, line := range rawLines {
+		l := canonicalizeIngredientName(line)
+		// ひき肉は部位ではなく別の食材として扱う
+		if strings.Contains(l, "ひき肉") || strings.Contains(l, "挽肉") || strings.Contains(l, "ミンチ") {
+			continue
+		}
+		isChicken := containsAny(l, chickenWords)
+		for _, rule := range chickenPartRules {
+			if rule.needsChicken && !isChicken {
+				continue
+			}
+			if containsAny(l, rule.keywords) {
+				if !seen[rule.name] {
+					seen[rule.name] = true
+					parts = append(parts, rule.name)
+				}
+				break
+			}
+		}
+	}
+	return parts
+}
+
+// isChickenName は「鶏肉」やその部位を指す名前かどうかを判定する。
+// AIが返した部位名（例: 鶏手羽元）も、こちらの判定結果で置き換えるために使う
+func isChickenName(name string) bool {
+	n := canonicalizeIngredientName(name)
+	if n == "鶏肉" || strings.Contains(n, "手羽") || strings.Contains(n, "ささみ") || strings.Contains(n, "ササミ") {
+		return true
+	}
+	if strings.Contains(n, "ひき肉") || strings.Contains(n, "挽肉") {
+		return false // 鶏ひき肉は部位ではない
+	}
+	return containsAny(n, chickenWords) && containsAny(n, []string{"むね", "ムネ", "胸", "もも", "モモ"})
+}
+
+// applyChickenParts は「鶏肉」やAIが返した部位名を、材料から判定した部位に置き換える
+func applyChickenParts(names []string, parts []string) []string {
+	if len(parts) == 0 {
+		return names
+	}
+	out := make([]string, 0, len(names)+len(parts))
+	replaced := false
+	for _, name := range names {
+		if isChickenName(name) {
+			if !replaced {
+				out = append(out, parts...)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, name)
+	}
+	if !replaced {
+		// AIが「鶏肉」を返さなかった場合でも、判定した部位は必ず含める
+		out = append(out, parts...)
+	}
+
+	deduped := make([]string, 0, len(out))
+	seen := make(map[string]bool, len(out))
+	for _, name := range out {
+		if !seen[name] {
+			seen[name] = true
+			deduped = append(deduped, name)
+		}
+	}
+	return deduped
 }
 
 func newIngredientFromResolution(name string, item resolvedIngredient) *Ingredient {
@@ -261,6 +405,11 @@ func newIngredientFromResolution(name string, item resolvedIngredient) *Ingredie
 	for _, alias := range item.Aliases {
 		key := canonicalizeIngredientName(alias)
 		if key == "" || seen[key] {
+			continue
+		}
+		// 鶏肉の部位を別名にしない（「鶏肉」の別名に「鶏もも肉」が入ると、
+		// 検索でもも肉を入力しても総称の鶏肉に寄ってしまうため）
+		if parts := detectChickenParts([]string{key}); len(parts) > 0 && parts[0] != name {
 			continue
 		}
 		seen[key] = true
