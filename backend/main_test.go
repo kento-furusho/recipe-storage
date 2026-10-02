@@ -361,29 +361,32 @@ func TestExtractYouTubeVideoID(t *testing.T) {
 
 func TestBuildPromptForYouTube(t *testing.T) {
 	t.Run("all fields", func(t *testing.T) {
-		prompt := buildPromptForYouTube("チキンカレーの作り方", "材料: 鶏肉", "まず鶏肉を切ります", "https://youtu.be/abc")
+		prompt := buildPromptForYouTube("チキンカレーの作り方", "材料: 鶏肉", "https://youtu.be/abc")
 		expects := []string{
 			"YouTube料理動画",
 			"チキンカレーの作り方",
 			"材料: 鶏肉",
-			"まず鶏肉を切ります",
 			"https://youtu.be/abc",
 			"JSON形式で返してください",
+			// タイトルと説明欄だけになったので、書かれていない材料・手順は作らせない
+			"推測・創作しないでください",
+			`"steps" を空配列 [] にしてください`,
 		}
 		for _, s := range expects {
 			if !containsStr(prompt, s) {
 				t.Errorf("prompt missing %q", s)
 			}
 		}
+		// 字幕はYouTubeの規約上取得しない
+		if containsStr(prompt, "字幕") {
+			t.Error("prompt should not mention captions")
+		}
 	})
 
-	t.Run("empty description and captions", func(t *testing.T) {
-		prompt := buildPromptForYouTube("タイトル", "", "", "https://youtu.be/abc")
+	t.Run("empty description", func(t *testing.T) {
+		prompt := buildPromptForYouTube("タイトル", "", "https://youtu.be/abc")
 		if containsStr(prompt, "【説明欄】") {
 			t.Error("should not contain description section when empty")
-		}
-		if containsStr(prompt, "【字幕テキスト】") {
-			t.Error("should not contain captions section when empty")
 		}
 	})
 }
