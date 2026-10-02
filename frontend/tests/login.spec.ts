@@ -19,25 +19,11 @@ test.describe("Login Page", () => {
     ).toBeVisible();
   });
 
-  test("can switch to sign up mode", async ({ page }) => {
-    await page.getByRole("button", { name: "新規登録" }).click();
-
-    await expect(page.getByText("新しいアカウントを作成")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "アカウント作成" })
-    ).toBeVisible();
-    // Password requirements hint
-    await expect(
-      page.getByText("8文字以上、大文字・小文字・数字を含む")
-    ).toBeVisible();
-  });
-
-  test("can switch back to sign in from sign up", async ({ page }) => {
-    await page.getByRole("button", { name: "新規登録" }).click();
-    await expect(page.getByText("新しいアカウントを作成")).toBeVisible();
-
-    await page.getByRole("button", { name: "サインイン" }).click();
+  // 自分専用のアプリなので新規登録はできない
+  test("does not offer sign up", async ({ page }) => {
     await expect(page.getByText("アカウントにサインイン")).toBeVisible();
+    await expect(page.getByRole("button", { name: "新規登録" })).toHaveCount(0);
+    await expect(page.getByText("新しいアカウントを作成")).toHaveCount(0);
   });
 
   test("sign in form requires email and password", async ({ page }) => {

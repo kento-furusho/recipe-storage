@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +14,29 @@ import (
 )
 
 const maxWebPageBodySize = 3 * 1024 * 1024 // 3MB
+
+// blockedRecipeSites は利用規約で自動化された手段でのアクセス・抽出を禁止しているため、
+// URLからの取り込みを行わないサイト（サブドメインも含む）
+var blockedRecipeSites = []string{
+	"buzzfeed.com", // 利用規約でロボット・スクレーパによるアクセスと抽出を禁止（個人利用の例外なし）
+}
+
+const blockedRecipeSiteMessage = "このサイトは利用規約で自動での取得が禁止されているため、URLからは取り込めません"
+
+// isBlockedRecipeSite は自動取得してはいけないサイトのURLかを判定する
+func isBlockedRecipeSite(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, domain := range blockedRecipeSites {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
 
 // fetchWebPageText はURLからHTMLを取得し、本文らしきテキストを抽出する
 func fetchWebPageText(ctx context.Context, pageURL string) (title, text string, err error) {

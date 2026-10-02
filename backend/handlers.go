@@ -72,6 +72,11 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "imageKeys or sourceUrl required", http.StatusBadRequest)
 		return
 	}
+	// URLからページを取得するのは画像が無いときだけ。規約で自動取得を禁止しているサイトは受け付けない
+	if len(req.ImageKeys) == 0 && isBlockedRecipeSite(*req.SourceURL) {
+		http.Error(w, blockedRecipeSiteMessage, http.StatusUnprocessableEntity)
+		return
+	}
 
 	jobID := uuid.New().String()
 	userID := getUserID(r)

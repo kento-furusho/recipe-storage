@@ -25,6 +25,18 @@ func processJob(jobID string) {
 		return
 	}
 
+	// 規約で自動取得を禁止しているサイトはページを取得しない。
+	// 再作成で既存レシピをダミーで上書きしないよう、レシピは保存せずジョブを失敗にする
+	if len(job.ImageKeys) == 0 && job.SourceURL != nil && isBlockedRecipeSite(*job.SourceURL) {
+		log.Printf("Job %s skipped: %s does not allow automated access", jobID, *job.SourceURL)
+		job.Status = JobStatusFailed
+		job.UpdatedAt = time.Now()
+		if err := dbStore.SaveJob(ctx, job); err != nil {
+			log.Printf("Failed to update job status: %v", err)
+		}
+		return
+	}
+
 	// ステータスを更新
 	job.Status = JobStatusProcessing
 	job.UpdatedAt = time.Now()

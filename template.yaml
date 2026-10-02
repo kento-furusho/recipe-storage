@@ -80,6 +80,9 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: recipe-user-pool
+      # 自分専用のアプリなので、アプリからの新規登録は受け付けない（管理者だけがユーザーを作成できる）
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
       UsernameAttributes:
         - email
       AutoVerifiedAttributes:

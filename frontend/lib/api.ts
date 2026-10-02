@@ -198,6 +198,10 @@ export async function createJob(
 
   if (!response.ok) {
     const errorText = await response.text();
+    // 422 は取り込めないサイトなど、ユーザーに見せる前提の日本語メッセージ
+    if (response.status === 422) {
+      throw new Error(errorText.trim());
+    }
     throw new Error(`Failed to create job: ${errorText}`);
   }
 
